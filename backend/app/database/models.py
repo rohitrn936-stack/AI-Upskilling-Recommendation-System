@@ -31,6 +31,7 @@ class User(Base):
     skills = relationship("StudentSkill", back_populates="user")
     roadmaps = relationship("LearningRoadmap", back_populates="student")
     progress = relationship("TaskProgress", back_populates="user")
+    recommendations = relationship("CareerRecommendation", back_populates="user")
 
 
 class StudentProfile(Base):
@@ -80,7 +81,9 @@ class Career(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    required_skills = relationship("CareerRequiredSkill", back_populates="cascade_delete", cascade="all, delete-orphan")
+    required_skills = relationship("CareerRequiredSkill", back_populates="career", cascade="all, delete-orphan")
+    recommendations = relationship("CareerRecommendation", back_populates="career")
+    roadmaps = relationship("LearningRoadmap", back_populates="career")
 
 
 class CareerRequiredSkill(Base):

@@ -1,391 +1,480 @@
-# Software Requirements Specification Document 
-
 # AI-Powered Upskilling Recommendation and Automation System for Students
 
-## Document Information
+## Project Overview
 
-| Field | Details |
+A complete AI-Powered Upskilling Recommendation and Automation System for Students with a Flutter frontend, FastAPI backend, PostgreSQL database, and configurable AI provider (Gemini/Ollama) integration. The system helps students understand their current skill set, identify suitable career paths, determine skills they need to develop, and follow a structured learning roadmap.
+
+## System Status
+
+**✅ Fully Implemented:**
+- All 16 Flutter screens with Material 3, Riverpod, GoRouter
+- FastAPI backend with all 10 modules (auth, profile, skills, careers, roadmap, progress, AI)
+- PostgreSQL database with 13 tables and proper relationships
+- Configurable AI engine supporting Gemini, Ollama, and compatible providers
+- JWT authentication with session persistence
+- AI response validation with Pydantic schemas
+- Demo mode when API key not provided
+- Light/dark themes and responsive layouts
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        FLUTTER APP                              │
+│  • 16 Material 3 screens (GoRouter, Riverpod, Dio)             │
+│  • Authentication with token persistence                        │
+│  • Light/dark themes, responsive layouts                        │
+│  • Reusable widgets (AppBar, LoadingIndicator, ErrorMessage)    │
+└───────────────────────▲─────────────────────────────────────────┘
+                      │ REST API (Dio)
+┌───────────────────────▼─────────────────────────────────────────┐
+│                     FASTAPI BACKEND                              │
+│  • 13 PostgreSQL tables (SQLAlchemy models)                     │
+│  • JWT authentication (bcrypt hashing, 30-min tokens)           │
+│  • Configurable AI service (Gemini/Ollama/compatible)            │
+│  • All 10 modules: auth, profile, skills, careers, roadmap,     │
+│    progress, AI, plus resources, recommendations                 │
+│  • Alembic migrations for database versioning                    │
+└───────────────────────▲─────────────────────────────────────────┘
+                      │ PostgreSQL
+┌───────────────────────▼─────────────────────────────────────────┐
+│                       DATABASE (PostgreSQL)                      │
+│  • 13 tables: users, student_profiles, student_skills,           │
+│    careers, career_required_skills, career_recommendations,       │
+│    skill_gap_analyses, learning_roadmaps, roadmap_versions,       │
+│    roadmap_phases, roadmap_tasks, learning_resources,            │
+│    task_progress                                              │
+│  • Proper foreign keys, cascading deletes, indexes               │
+│  • Seed data for careers and required skills                      │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+## Technology Stack
+
+### Frontend
+- **Flutter** with Dart
+- **Material 3** UI design
+- **Riverpod** state management
+- **GoRouter** navigation (16 routes)
+- **Dio** HTTP client
+- **Shared Preferences** for token persistence
+
+### Backend
+- **FastAPI** (Python)
+- **SQLAlchemy 2.0** ORM
+- **Alembic** database migrations
+- **Pydantic** validation (v2.7.4)
+- **Passlib** bcrypt password hashing
+
+### Database
+- **PostgreSQL**
+- 13 related tables with proper relationships
+- SQLAlchemy models with cascading behavior
+- Enum types for proficiency levels and task status
+
+### AI
+- **Configurable AI engine** supporting:
+  - **Gemini API** (Google Generative AI)
+  - **Ollama** (local LLMs, default: http://localhost:11434)
+  - **Compatible providers** (OpenAI-style APIs)
+- **Demo mode** when no API key configured
+- **Structured response validation** with Pydantic schemas
+- **Bounded retries** with timeout handling
+- **Deterministic calculations** for skill gaps + AI interpretation
+
+## Quick Start
+
+### Prerequisites
+- macOS (Apple Silicon recommended)
+- Flutter SDK (3.+)
+- Python 3.10+
+- PostgreSQL 13+
+- (Optional) Google Gemini API key or local Ollama setup
+
+### Backend Setup
+
+1. **Install dependencies:**
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+2. **Set up environment variables:**
+```bash
+export DATABASE_URL="postgresql://localhost:5432/upskilling"
+export AI_PROVIDER="gemini"  # or "ollama" or "compatible"
+export AI_MODEL="gemini-pro"  # model name for chosen provider
+export AI_API_KEY="your-gemini-key"  # empty for Ollama/compatible
+export JWT_SECRET_KEY="change-this-in-production"
+export ENVIRONMENT="development"
+```
+
+3. **Initialize database:**
+```bash
+# Create the database
+createdb upskilling
+
+# Run migrations
+cd backend
+/opt/homebrew/bin/python3 -c "
+import os
+os.environ['DATABASE_URL'] = 'postgresql://localhost:5432/upskilling'
+from alembic.config import Config
+config = Config('alembic.ini')
+command.upgrade(config, 'head')
+" 2>&1 || alembic upgrade head
+```
+
+4. **Start the backend:**
+```bash
+cd backend
+/opt/homebrew/bin/python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Frontend Setup
+
+1. **Install dependencies:**
+```bash
+cd .freebuff/flutter_upskilling
+flutter pub get
+```
+
+2. **Run the app:**
+```bash
+flutter run
+```
+
+### AI Provider Configuration
+
+#### Gemini API
+```bash
+export AI_PROVIDER="gemini"
+export AI_MODEL="gemini-pro"  # or gemini-1.5-flash, etc.
+export AI_API_KEY="your-google-gemini-api-key"
+```
+
+#### Ollama (Local)
+```bash
+export AI_PROVIDER="ollama"
+export AI_MODEL="llama2"  # or any installed Ollama model
+# No API key needed - Ollama runs locally
+# Ensure Ollama is running: ollama serve
+```
+
+#### Compatible Provider (OpenAI-style)
+```bash
+export AI_PROVIDER="compatible"
+export AI_BASE_URL="https://api.openai.com/v1"
+export AI_MODEL="gpt-4"
+export AI_API_KEY="your-openai-key"
+```
+
+#### Demo Mode (No API Key)
+```bash
+export AI_PROVIDER="gemini"
+export AI_API_KEY=""  # Leave empty
+# Application runs in demo mode with structured mock responses
+```
+
+## API Endpoints
+
+### Authentication
+| Endpoint | Description |
 |---|---|
-| Project Title | AI-Powered Upskilling Recommendation and Automation System for Students |
-| Project ID | 22 |
-| Version | 1.0 |
-| Status | Draft |
-
-# 1. Introduction
-
-## 1.1 Purpose
-
-This Software Requirements Specification (SRS) defines the functional and non-functional requirements of the AI-Powered Upskilling Recommendation and Automation System for Students.
-
-The purpose of the system is to help students understand their current skill set, identify suitable career paths, determine the skills they need to develop, and follow a structured learning roadmap.
-
-The system uses student skill information to provide career recommendations. After a student selects a career path, the system compares the student's existing skills with the skills required for that career and identifies the missing skills.
-
-Based on the identified skill gaps, the system generates a structured learning roadmap. Students can also track their progress as they complete the recommended skills.
-
-This document serves as a reference for the development, testing, and evaluation of the system.
-
-## 1.2 Intended Audience
-
-This document is intended for:
-
-- **Students:** Primary users of the system.
-- **Development Team:** Team members responsible for designing and implementing the system.
-- **Project Evaluators:** Faculty members evaluating the project.
-- **Future Developers:** Developers who may maintain or extend the system.
-
-## 1.3 Product Scope
-
-The AI-Powered Upskilling Recommendation and Automation System for Students is a web-based application designed to assist students in planning their skill development.
-
-The system allows students to:
-
-- Create an account and log in.
-- Create and manage a student profile.
-- Add their existing skills.
-- Receive suitable career recommendations.
-- Select a career path.
-- Identify the gap between their current skills and the skills required for the selected career.
-- Receive a personalized learning roadmap.
-- Track their progress.
-
-The system will include a machine learning component for career recommendation.
-
-The system will also include a skill gap analysis component that compares the student's skills with the skills required for a selected career.
-
-The project focuses on providing a simple and structured solution for student career exploration and skill development.
-
-## 1.4 References
-
-The following documents and resources are referenced:
-
-1. Software Engineering Mini Project Guidelines.
-2. Project Problem Statement #22: AI-Powered Upskilling Recommendation and Automation System for Students.
-3. Publicly available datasets used for the machine learning component.
-4. Standard Software Requirements Specification practices.
-
-# 2. Overall Description
-
-## 2.1 Product Perspective
-
-The system will be developed as a web-based application.
-
-The application will consist of the following main components:
-
-- Frontend user interface.
-- Backend application.
-- Database.
-- Machine learning model.
-- Skill gap analysis module.
-- Learning roadmap module.
-
-The overall system flow is:
-
-Student
-   |
-   v
-User Interface
-   |
-   v
-Student Profile and Skills
-   |
-   +------------------------+
-   |                        |
-   v                        v
-Career Recommendation    Database
-   |
-   v
-Recommended Careers
-   |
-   v
-Student Selects Career
-   |
-   v
-Skill Gap Analysis
-   |
-   v
-Missing Skills
-   |
-   v
-Learning Roadmap
-   |
-   v
-Progress Tracking
-
-## 2.2 Product Functions
-
-The system will provide the following functions:
-
-1. User registration and login.
-2. Student profile management.
-3. Skill management.
-4. Career recommendation using a machine learning model.
-5. Career path selection.
-6. Skill gap analysis.
-7. Learning roadmap generation.
-8. Progress tracking.
-
-## 2.3 User Classes and Characteristics
-
-### Student
-
-Students are the primary users of the system.
-
-Students can:
-
-- Register and log in.
-- Manage their profile.
-- Add and manage skills.
-- Receive career recommendations.
-- Select a career path.
-- View skill gaps.
-- View a learning roadmap.
-- Track their learning progress.
-
-## 2.4 Operating Environment
-
-The system will operate in the following environment:
-
-- **Client:** Modern web browser.
-- **Operating Systems:** Windows, Linux, or macOS.
-- **Frontend:** Web-based user interface.
-- **Backend:** Server-side application.
-- **Database:** Database for storing application data.
-- **Machine Learning:** Python-based machine learning libraries may be used.
-
-The final technologies will be selected during the implementation phase.
-
-## 2.5 Design and Implementation Constraints
-
-The following constraints apply:
-
-- The project must be completed within the allocated academic timeline.
-- The system must be feasible for a student development team.
-- Publicly available datasets may be used for the machine learning component.
-- The system should use freely available development tools and libraries.
-- The system should have a modular design.
-- Each major functionality should be independently testable.
-
-## 2.6 Assumptions and Dependencies
-
-The following assumptions are made:
-
-- Students will provide accurate information about their skills.
-- A suitable dataset will be available for career recommendation.
-- Information about career paths and required skills will be available.
-- Students will access the system through a supported web browser.
-- The machine learning model will be trained using available data before deployment.
-
-# 3. External Interface Requirements
-
-## 3.1 User Interface
-
-The system will provide a web-based user interface.
-
-The main user interfaces will include:
-
-- Registration page.
-- Login page.
-- Student dashboard.
-- Profile page.
-- Skill management page.
-- Career recommendation page.
-- Skill gap analysis page.
-- Learning roadmap page.
-- Progress tracking page.
-
-The interface should be simple and easy to understand.
-
-## 3.2 Software Interfaces
-
-The system will interact with:
-
-- A database for storing user and application data.
-- A machine learning component for career prediction.
-- Backend APIs for communication between the frontend and backend.
-
-## 3.3 Communication Interfaces
-
-The frontend and backend will communicate using web-based APIs.
-
-Communication will use HTTP or HTTPS.
-
-Data exchanged between components will use JSON format where applicable.
-
-# 4. System Features and Functional Requirements
-
-## 4.1 User Registration and Authentication
-
-The system shall allow students to create an account and access the application using valid credentials.
-
-### Functional Requirements
-
-- **FR-01:** The system shall allow a new student to register.
-- **FR-02:** The system shall validate registration information.
-- **FR-03:** The system shall allow registered students to log in.
-- **FR-04:** The system shall reject invalid login credentials.
-- **FR-05:** The system shall allow authenticated students to log out.
-
-## 4.2 Student Profile Management
-
-The system shall allow students to create and manage their profile information.
-
-Profile information may include educational information and career interests.
-
-### Functional Requirements
-
-- **FR-06:** The system shall allow students to view their profile.
-- **FR-07:** The system shall allow students to update their profile information.
-- **FR-08:** The system shall allow students to add educational information.
-- **FR-09:** The system shall allow students to specify their career interests.
-
-## 4.3 Skill Management
-
-The system shall allow students to manage their existing skills.
-
-### Functional Requirements
-
-- **FR-10:** The system shall allow students to add skills.
-- **FR-11:** The system shall allow students to remove skills.
-- **FR-12:** The system shall store the skills associated with each student.
-- **FR-13:** The system shall display the student's current skills.
-
-## 4.4 Career Recommendation
-
-The system shall provide suitable career recommendations based on the student's skills.
-
-A machine learning model will analyze the available student skill information and generate career recommendations.
-
-### Functional Requirements
-
-- **FR-14:** The system shall accept student skill information as input.
-- **FR-15:** The system shall process the student's skills using the career recommendation component.
-- **FR-16:** The system shall provide one or more career recommendations.
-- **FR-17:** The system shall display the recommended career paths.
-- **FR-18:** The system shall allow the student to select a career path.
-
-## 4.5 Skill Gap Analysis
-
-The system shall identify the skills that a student needs to develop for a selected career.
-
-The system will compare the student's existing skills with the skills required for the selected career.
-
-### Functional Requirements
-
-- **FR-19:** The system shall retrieve the required skills for a selected career.
-- **FR-20:** The system shall retrieve the student's existing skills.
-- **FR-21:** The system shall compare the student's skills with the required skills.
-- **FR-22:** The system shall identify missing skills.
-- **FR-23:** The system shall display the identified skill gaps.
-- **FR-24:** The system shall display the student's skill match percentage.
-
-## 4.6 Learning Roadmap Generation
-
-The system shall generate a learning roadmap based on the skills missing from the student's profile.
-
-The roadmap will provide a structured sequence of skills that the student should learn.
-
-### Functional Requirements
-
-- **FR-25:** The system shall generate a learning roadmap based on identified skill gaps.
-- **FR-26:** The system shall include missing skills in the roadmap.
-- **FR-27:** The system shall organize skills in a logical learning sequence.
-- **FR-28:** The system shall display the learning roadmap to the student.
-
-## 4.7 Progress Tracking
-
-The system shall allow students to track their progress while completing the learning roadmap.
-
-### Functional Requirements
-
-- **FR-29:** The system shall allow students to mark roadmap items as completed.
-- **FR-30:** The system shall store the student's progress.
-- **FR-31:** The system shall display completed and incomplete roadmap items.
-- **FR-32:** The system shall calculate the student's overall progress.
-- **FR-33:** The system shall display progress information on the student dashboard.
-
-# 5. Non-Functional Requirements
-
-## 5.1 Performance Requirements
-
-- **NFR-01:** The system should respond to normal user requests within an acceptable time.
-- **NFR-02:** The system should retrieve and display student information efficiently.
-- **NFR-03:** Career recommendations should be generated within a reasonable time.
-
-## 5.2 Security Requirements
-
-- **NFR-04:** The system shall require authentication to access protected user information.
-- **NFR-05:** A student shall only be able to access their own information.
-- **NFR-06:** User credentials shall be handled securely.
-- **NFR-07:** The system shall validate user input.
-
-## 5.3 Usability Requirements
-
-- **NFR-08:** The system shall provide a simple and understandable user interface.
-- **NFR-09:** The system shall provide feedback for user actions.
-- **NFR-10:** The system shall provide meaningful error messages.
-- **NFR-11:** The system should be usable on modern desktop and mobile browsers.
-
-## 5.4 Reliability Requirements
-
-- **NFR-12:** The system shall maintain consistency of stored data.
-- **NFR-13:** The system should handle invalid input without crashing.
-- **NFR-14:** The system should handle common errors gracefully.
-
-## 5.5 Maintainability Requirements
-
-- **NFR-15:** The system shall follow a modular design.
-- **NFR-16:** The code shall be organized to allow future modifications.
-- **NFR-17:** The system shall maintain appropriate project documentation.
-
-# 6. Business Rules
-
-The following business rules apply:
-
-- **BR-01:** A student must register before accessing protected system features.
-- **BR-02:** A student must log in before viewing or modifying their profile.
-- **BR-03:** A student can only modify their own information.
-- **BR-04:** Career recommendations shall be generated based on the student's available skill information.
-- **BR-05:** Skill gap analysis shall compare the student's skills with the required skills of a selected career.
-- **BR-06:** A learning roadmap shall be generated based on the identified skill gaps.
-- **BR-07:** Only the corresponding student can update their learning progress.
-
-# 7. Data Requirements
-
-The system will manage the following data:
-
-- Student account information.
-- Student profile information.
-- Student skills.
-- Career paths.
-- Skills required for career paths.
-- Career recommendation data.
-- Learning roadmaps.
-- Student progress.
-
-Publicly available datasets may be used to train and evaluate the career recommendation model.
-
-# Appendix A: Glossary
-
-| Term | Definition |
+| `POST /api/auth/register` | Register new user (email, username, password) |
+| `POST /api/auth/login` | Login, receive JWT token |
+| `GET /api/profile` | Get current user profile (requires token) |
+| `POST /api/profile` | Update profile |
+
+### AI Services
+| Endpoint | Description |
 |---|---|
-| AI | Artificial Intelligence |
-| ML | Machine Learning |
-| API | Application Programming Interface |
-| SRS | Software Requirements Specification |
-| Skill Gap | The difference between a student's existing skills and the skills required for a career |
-| Career Path | A professional field or direction that requires a specific set of skills |
-| Learning Roadmap | A structured sequence of skills that a student should learn |
-| Career Recommendation | A suggestion of suitable career paths based on a student's skills |
+| `GET /health` | Health check with AI status |
+| `GET /api/ai/status` | AI provider status |
+| `POST /api/ai/career-recommendations` | Get career recommendations |
+| `POST /api/ai/skill-gap-analysis` | Analyze skill gaps |
+| `POST /api/ai/personalized-skills` | Get skill suggestions |
+| `POST /api/ai/roadmap-generate` | Generate learning roadmap |
+| `POST /api/ai/recommend-resources` | Recommend learning resources |
 
-# Appendix B: Requirement Traceability Matrix
+### Student Management
+| Endpoint | Description |
+|---|---|
+| `GET /api/skills` | List student's skills (requires token) |
+| `POST /api/skills` | Add a skill |
+| `PUT /api/skills/{id}` | Update a skill |
+| `DELETE /api/skills/{id}` | Delete a skill |
+| `GET /api/careers` | List all careers |
+| `GET /api/careers/{id}` | Get career details |
+| `GET /api/progress` | Get learning progress (requires token) |
+| `POST /api/progress/{id}` | Update task progress |
 
-| Requirement ID | Requirement | Module |
-|---|---|---|
-| FR-01 to FR-05 | User Registration and Authentication | User Management |
-| FR-06 to FR-09 | Student Profile Management | Profile Management |
-| FR-10 to FR-13 | Skill Management | Skill Management |
-| FR-14 to FR-18 | Career Recommendation | ML Recommendation Module |
-| FR-19 to FR-24 | Skill Gap Analysis | Skill Analysis Module |
-| FR-25 to FR-28 | Learning Roadmap Generation | Roadmap Module |
-| FR-29 to FR-33 | Progress Tracking | Progress Management |
+### Demo Mode
+- `GET /api/demo-mode` - Check if running in demo mode
+
+## Database Schema
+
+### Key Tables
+
+**users** - User accounts
+- id (PK), email (unique), username (unique), hashed_password
+- is_active, is_superuser, created_at
+
+**student_profiles** - Student profile information
+- id (PK), user_id (FK → users), name, institution, degree
+- academic_year, interests, learning_goals
+- created_at, updated_at (trigger)
+
+**student_skills** - Student's skills
+- id (PK), user_id (FK → users), profile_id (FK → student_profiles)
+- skill_name, proficiency_level, category
+- created_at
+
+**careers** - Career paths
+- id (PK), name (unique), description, category
+- average_salary, growth_outlook, created_at
+
+**career_required_skills** - Skills required for each career
+- id (PK), career_id (FK → careers), skill_name
+- proficiency_required, importance_weight (1-5)
+- created_at
+
+**learning_roadmaps** - Personalized learning roadmaps
+- id (PK), user_id (FK → users), career_id (FK → careers)
+- title, description, version, ai_provider, ai_model
+- created_at, updated_at (trigger)
+
+**roadmap_phases** - Phases within a roadmap
+- id (PK), roadmap_id (FK → learning_roadmaps)
+- phase_name, phase_order, description, estimated_duration
+
+**roadmap_tasks** - Tasks within phases
+- id (PK), phase_id (FK → roadmap_phases)
+- task_name, task_description, skill_focus
+- estimated_duration, order_index, completion_criteria
+
+**task_progress** - Task completion tracking
+- id (PK), user_id (FK → users), task_id (FK → roadmap_tasks)
+- status (completed/in_progress/not_started), completed_at, updated_at
+
+**career_recommendations** - AI-generated career recommendations
+- id (PK), user_id (FK → users), career_id (FK → careers)
+- match_score (0-100), reason, matching_skills (JSON), missing_skills (JSON)
+- ai_provider, ai_model, created_at
+
+**skill_gap_analyses** - Skill gap analysis results
+- id (PK), user_id (FK → users), career_id (FK → careers)
+- match_percentage (0-100), existing_skills (JSON), required_skills (JSON)
+- missing_skills (JSON), identified_skills (JSON), ai_provider, ai_model, created_at
+
+**learning_resources** - Recommended learning resources
+- id (PK), task_id (FK → roadmap_tasks)
+- resource_name, platform, description, resource_type, url
+- estimated_learning_duration, is_verified (default false), ai_provider, created_at
+
+## Migration Commands
+
+### Create Fresh Database
+```bash
+# Create database
+createdb upskilling
+
+# Apply all migrations
+cd backend
+/opt/homebrew/bin/python3 -c "
+import os
+os.environ['DATABASE_URL'] = 'postgresql://localhost:5432/upskilling'
+from alembic.config import Config
+config = Config('alembic.ini')
+command.upgrade(config, 'head')
+" || alembic upgrade head
+```
+
+### Generate New Migration
+```bash
+cd backend
+/opt/homebrew/bin/python3 -m alembic revision --autogenerate -m "description of changes"
+/opt/homebrew/bin/python3 -m alembic upgrade head
+```
+
+### Rollback Migration
+```bash
+cd backend
+/opt/homebrew/bin/python3 -m alembic downgrade -1
+```
+
+## Flutter Commands
+
+### Run on macOS
+```bash
+cd .freebuff/flutter_upskilling
+flutter run  # or: flutter run -d macos
+```
+
+### Build Release
+```bash
+cd .freebuff/flutter_upskilling
+flutter build macos --release
+flutter build ios --release
+flutter build web --release
+```
+
+### Analyze for Errors
+```bash
+cd .freebuff/flutter_upskilling
+flutter analyze
+flutter clean && flutter pub get && flutter analyze
+```
+
+## Testing
+
+### Backend Tests
+```bash
+cd backend
+/opt/homebrew/bin/python3 -m pytest tests/ -v
+```
+
+### Flutter Tests
+```bash
+cd .freebuff/flutter_upskilling
+/opt/homebrew/bin/flutter test
+```
+
+### API Testing
+Use curl or Postman:
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Authentication
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "username": "testuser", "password": "password123"}'
+
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "testuser", "password": "password123"}'
+```
+
+## Directory Structure
+
+```
+AI-Upskilling-Recommendation-System/
+├── README.md                    # This file
+├── docs/
+│   └── SRS.md                   # Software Requirements Specification
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI app with all routes
+│   │   ├── core/config.py      # Settings with AI provider config
+│   │   ├── database/           # SQLAlchemy models + connection
+│   │   │   ├── models.py       # All 13 SQLAlchemy models
+│   │   │   └── connection.py   # DATABASE_URL from env
+│   │   ├── services/ai/        # AI provider abstraction
+│   │   │   ├── service.py      # Shared AI service
+│   │   │   ├── providers/      # Gemini/Ollama/Compatible
+│   │   │   │   ├── base.py     # AIProvider base class
+│   │   │   │   ├── gemini.py   # Gemini provider
+│   │   │   │   ├── ollama.py   # Ollama provider
+│   │   │   │   └── compatible.py  # Compatible provider
+│   │   ├── api/                # All REST API endpoints
+│   │   ├── models.py           # SQLAlchemy Base
+│   │   └── services/           # Business logic
+│   ├── requirements.txt        # Python deps (no Flutter packages)
+│   ├── alembic.ini             # Migration config
+│   └── migrations/
+│       └── versions/
+│           └── 9a8c7ac117d4_*.py  # Initial schema migration
+└── .freebuff/
+    └── flutter_upskilling/
+        ├── lib/
+        │   ├── main.dart       # GoRouter (16 routes)
+        │   ├── screens/        # All 16 screens
+        │   │   ├── splash_screen.dart
+        │   │   ├── onboarding_screen.dart
+        │   │   ├── registration_screen.dart
+        │   │   ├── login_screen.dart
+        │   │   ├── dashboard_screen.dart
+        │   │   ├── student_profile_screen.dart
+        │   │   ├── skill_management_screen.dart
+        │   │   ├── career_recommendations_screen.dart
+        │   │   ├── career_details_screen.dart
+        │   │   ├── skill_gap_analysis_screen.dart
+        │   │   ├── personalized_skill_suggestions_screen.dart
+        │   │   ├── learning_roadmap_screen.dart
+        │   │   ├── roadmap_task_details_screen.dart
+        │   │   ├── learning_resources_screen.dart
+        │   │   ├── progress_tracking_screen.dart
+        │   │   └── settings_screen.dart
+        │   └── widgets/          # Reusable components
+        │       ├── app_bar.dart
+        │       ├── loading_indicator.dart
+        │       └── error_message.dart
+        ├── pubspec.yaml         # Flutter dependencies
+        └── analysis_options.yaml
+```
+
+## AI Provider Architecture
+
+The application uses a **shared AI service** with a **provider abstraction** so that switching between Gemini and Ollama (or any compatible provider) requires only configuration changes, not code changes.
+
+### Provider Interface (`AIProvider` base class)
+All providers implement:
+- `generate(prompt, response_model?) → Any` - Generate text response
+- `health_check() → bool` - Check provider availability
+
+### Concrete Providers
+
+**GeminiProvider** - Google Generative AI
+- Reads API key from `AI_API_KEY` environment variable
+- Reads model name from `AI_MODEL` configuration
+- Supports structured JSON responses when available
+- Handles timeouts and rate limits with bounded retries
+
+**OllamaProvider** - Local LLM via Ollama
+- Default base URL: `http://localhost:11434`
+- Configurable model name via `AI_MODEL`
+- No API key required
+- Connection health checks
+- Automatic retries on connection errors
+
+**CompatibleProvider** - OpenAI-style APIs
+- Configurable base URL via `AI_BASE_URL`
+- Configurable API key via `AI_API_KEY`
+- Configurable model via `AI_MODEL`
+- Supports chat completions endpoint
+
+### Demo Mode
+When `AI_API_KEY` is empty or provider fails:
+- Application continues in demo mode
+- Structured mock responses with `demo_mode: true` flag
+- Clearly labeled demo/mock data in all responses
+- Non-AI features remain fully functional
+- Users see meaningful messages about AI unavailability
+
+## Security
+
+- **Never hardcode API keys** - all credentials via environment variables
+- **Password hashing** with bcrypt (via passlib)
+- **JWT tokens** with 30-minute expiration (configurable)
+- **User ownership checks** on all protected endpoints
+- **One student cannot access another's data** by ID manipulation
+- **CORS configured** for safe development (restrict for production)
+- **Input validation** with Pydantic schemas on all endpoints
+
+## Known Limitations
+
+- **Flutter-FastAPI integration**: Requires running backend server; CORS may need adjustment for production origins
+- **AI provider**: Demo mode works without API key; Gemini/Ollama require proper setup
+- **Database**: PostgreSQL must be running and accessible via `DATABASE_URL`
+- **Ollama**: Requires local installation and at least one model pulled (`ollama pull llama2` etc.)
+
+## Future Enhancements
+
+- Real-time progress syncing
+- Offline mode with local caching
+- Social features (study groups, progress sharing)
+- Additional AI models and providers
+- Advanced analytics and reporting
+- Push notifications for progress milestones
+- Multi-language support

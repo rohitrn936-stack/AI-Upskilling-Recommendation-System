@@ -6,6 +6,12 @@ Create Date: 2026-11-10 08:29:38.422903
 
 """
 
+# Note: Enum types are NOT created here because the SQLAlchemy models
+# use String type for proficiency_level, proficiency_required, and status fields.
+# This avoids type mismatches between the model definitions and PostgreSQL enums.
+# If you want to use PostgreSQL enums, update the models to use sa.Enum type
+# and ensure the enum values match exactly.
+
 from alembic import op
 import sqlalchemy as sa
 import sqlalchemy_utils
@@ -21,17 +27,7 @@ depends_on = None
 def upgrade() -> None:
     """Upgrade schema."""
     
-    # Create enum types first
-    proficiency_level = sa.Enum('beginner', 'intermediate', 'advanced', 'expert', name='proficiencylevel')
-    proficiency_level.create(op.get_bind())
-    
-    career_proficiency = sa.Enum('beginner', 'intermediate', 'advanced', 'expert', name='careerproficiency')
-    career_proficiency.create(op.get_bind())
-    
-    task_status = sa.Enum('completed', 'in_progress', 'not_started', name='taskstatus')
-    task_status.create(op.get_bind())
-    
-    # Create tables
+    # Create tables (no enum types - models use String)
     
     # users table
     op.create_table(
@@ -72,7 +68,7 @@ def upgrade() -> None:
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('profile_id', sa.Integer(), nullable=True),
         sa.Column('skill_name', sa.String(), nullable=False),
-        sa.Column('proficiency_level', sa.Enum('beginner', 'intermediate', 'advanced', 'expert', name='proficiencylevel'), nullable=True),
+        sa.Column('proficiency_level', sa.String(), nullable=True),
         sa.Column('category', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -100,7 +96,7 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('career_id', sa.Integer(), nullable=False),
         sa.Column('skill_name', sa.String(), nullable=False),
-        sa.Column('proficiency_required', sa.Enum('beginner', 'intermediate', 'advanced', 'expert', name='careerproficiency'), nullable=True),
+        sa.Column('proficiency_required', sa.String(), nullable=True),
         sa.Column('importance_weight', sa.Integer(), nullable=False, server_default=sa.text('1')),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(['career_id'], ['careers.id'], ondelete='CASCADE'),
@@ -179,7 +175,6 @@ def upgrade() -> None:
         sa.Column('phase_name', sa.String(), nullable=False),
         sa.Column('phase_order', sa.Integer(), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('estimated_duration', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(['roadmap_id'], ['learning_roadmaps.id'], ondelete='CASCADE'),
     )
@@ -221,7 +216,7 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('task_id', sa.Integer(), nullable=False),
-        sa.Column('status', sa.Enum('completed', 'in_progress', 'not_started', name='taskstatus'), nullable=False),
+        sa.Column('status', sa.String(), nullable=False),
         sa.Column('completed_at', sa.DateTime(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
@@ -244,31 +239,10 @@ def upgrade() -> None:
     op.create_index(op.f('ix_learning_resources_task_id'), 'learning_resources', ['task_id'])
     op.create_index(op.f('ix_task_progress_user_id'), 'task_progress', ['user_id'])
     op.create_index(op.f('ix_task_progress_task_id'), 'task_progress', ['task_id'])
-    
-    # Create triggers for updated_at on student_profiles
-    op.execute("""
-        CREATE OR REPLACE FUNCTION update_student_profiles_updated_at()
-        RETURNS TRIGGER AS $$
-        BEGIN
-            NEW.updated_at = NOW();
-            RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-    """)
-    op.execute("""
-        CREATE TRIGGER update_student_profiles_updated_at_trigger
-        BEFORE UPDATE ON student_profiles
-        FOR EACH ROW
-        EXECUTE FUNCTION update_student_profiles_updated_at();
-    """)
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    
-    # Drop triggers and functions first
-    op.execute("DROP TRIGGER IF EXISTS update_student_profiles_updated_at_trigger ON student_profiles;")
-    op.execute("DROP FUNCTION IF EXISTS update_student_profiles_updated_at()")
     
     # Drop tables in reverse order (due to foreign key dependencies)
     op.drop_table('task_progress')
@@ -284,8 +258,3 @@ def downgrade() -> None:
     op.drop_table('student_skills')
     op.drop_table('student_profiles')
     op.drop_table('users')
-    
-    # Drop enum types
-    op.execute("DROP TYPE IF EXISTS taskstatus")
-    op.execute("DROP TYPE IF EXISTS careerproficiency")
-    op.execute("DROP TYPE IF EXISTS proficiencylevel")

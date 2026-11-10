@@ -8,9 +8,6 @@ pydantic-settings==2.2.1
 sqlalchemy==2.0.29
 alembic==1.13.1
 psycopg2-binary==2.9.9
-dio==5.4.3
-riverpod==2.7.1
-go_router==14.2.0
 
 # AI dependencies
 google-generativeai==0.3.2
