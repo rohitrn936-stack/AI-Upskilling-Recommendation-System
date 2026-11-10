@@ -18,7 +18,7 @@ build/
 
 # Package manager
 .glide.yml
-pubspec.lock
+!pubspec.lock
 
 # Android
 /app/src/main/res/values/strings_gen.dart
