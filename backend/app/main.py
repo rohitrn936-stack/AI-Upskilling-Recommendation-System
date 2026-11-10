@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -293,9 +293,9 @@ async def recommend_resources(request: ResourceRecommendationRequest, db: Sessio
 
 @app.post("/api/auth/register")
 async def register(
-    email: str,
-    username: str,
-    password: str,
+    email: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(...),
     db: Session = Depends(get_db),
 ):
     """User registration with password hashing."""
