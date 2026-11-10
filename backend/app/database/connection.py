@@ -3,13 +3,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-# DATABASE_URL should be set via environment variable
+# DATABASE_URL must be set via environment variable
 # Format: postgresql://user:password@host:port/database
-database_url = os.environ.get(
-    "DATABASE_URL", 
-    "postgresql://localhost:5432/upskilling"
-)
+database_url = os.environ.get("DATABASE_URL")
 
+if not database_url:
+    raise ValueError("DATABASE_URL environment variable not set")
 Base = declarative_base()
 
 engine = create_engine(

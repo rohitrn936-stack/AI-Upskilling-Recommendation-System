@@ -4,19 +4,16 @@ import sys
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-# Read DATABASE_URL from environment variable
+# Read DATABASE_URL from environment variable - required
+# Raises ValueError if not set, preventing silent connection to wrong database
 database_url = os.environ.get("DATABASE_URL")
 
-if database_url:
-    os.environ["SQLALCHEMY_URL"] = database_url
-    sqlalchemy_url = database_url
-else:
-    # Fallback for local development - should be set via env var in production
-    sqlalchemy_url = os.environ.get(
-        "SQLALCHEMY_URL", 
-        "postgresql://localhost:5432/upskilling"
-    )
-    os.environ["SQLALCHEMY_URL"] = sqlalchemy_url
+if not database_url:
+    raise ValueError("DATABASE_URL environment variable not set. "
+                   "Set DATABASE_URL before running Alembic migrations.")
+
+os.environ["SQLALCHEMY_URL"] = database_url
+sqlalchemy_url = database_url
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'app'))
 from database.models import Base

@@ -13,7 +13,7 @@ from app.services.ai.service import AIService
 ai_service = AIService()
 
 # OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 # Dependency to get DB session
 def get_db():
@@ -563,14 +563,17 @@ async def get_progress(
         ]
     }}
 
+class ProgressUpdateRequest(BaseModel):
+    status: str = Field(..., description="Task status (e.g., completed, in_progress)")
+
 @app.post("/api/progress/{task_id}")
 async def update_progress(
     task_id: int,
-    status: str,
+    progress_data: ProgressUpdateRequest,
     current_user = Depends(get_current_user_dependency),
     db: Session = Depends(get_db),
 ):
-    """Update task progress."""
+    """Update task progress with JSON body validation."""
     from app.database.models import TaskProgress
 
     progress = db.query(TaskProgress).filter(
@@ -579,19 +582,15 @@ async def update_progress(
     ).first()
 
     if not progress:
-        progress = TaskProgress(
-            user_id=current_user.id,
-            task_id=task_id,
-            status=status,
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task {task_id} not found",
         )
-        db.add(progress)
-    else:
-        progress.status = status
-        progress.updated_at = datetime.utcnow() if hasattr(progress, 'updated_at') else None
 
+    progress.status = progress_data.status
     db.commit()
 
-    return {"success": True, "data": {"message": f"Task {task_id} marked as {status}"}}
+    return {"success": True, "data": {"message": f"Task {task_id} marked as {progress_data.status}"}}
 
 @app.get("/")
 async def root():
