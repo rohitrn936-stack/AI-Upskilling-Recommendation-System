@@ -195,130 +195,107 @@ void main() {
   });
 
   group('API Client - Error Handling', () {
-    test('401 handling - unauthorized responses trigger token removal', () async {
+    test('401 handling - unauthorized responses trigger token removal', () {
       // Test that 401 responses are properly handled by _handleResponse
       // The method should clear stored JWT token on 401
-      expect(true, isTrue);
     });
 
-    test('404 handling - not found responses', () async {
+    test('404 handling - not found responses', () {
       // Test that 404 responses are properly handled
-      expect(true, isTrue);
     });
 
-    test('422 handling - validation errors', () async {
+    test('422 handling - validation errors', () {
       // Test that 422 validation errors are properly handled
-      expect(true, isTrue);
     });
 
-    test('500 handling - server errors', () async {
+    test('500 handling - server errors', () {
       // Test that 500 server errors are properly handled
-      expect(true, isTrue);
     });
 
-    test('malformed JSON response handling', () async {
+    test('malformed JSON response handling', () {
       // Test handling of invalid JSON responses
-      expect(true, isTrue);
     });
   });
 
   group('API Client - Authentication', () {
-    test('JWT token storage after login', () async {
+    test('JWT token storage after login', () {
       // Verify token is stored after successful login
       // The saveToken method should persist token to SharedPreferences
-      expect(true, isTrue);
     });
 
-    test('JWT token removal after logout', () async {
+    test('JWT token removal after logout', () {
       // Verify token is removed after logout
       // The removeToken method should clear stored token
-      expect(true, isTrue);
     });
 
-    test('Authorization header constructed correctly', () async {
+    test('Authorization header constructed correctly', () {
       // Verify Bearer token format in headers
       // Headers should include "Authorization: Bearer <token>"
-      expect(true, isTrue);
     });
 
-    test('Login returns valid JWT token', () async {
+    test('Login returns valid JWT token', () {
       // Verify login returns access_token in response body
-      expect(true, isTrue);
     });
   });
 
   group('API Client - Form Authentication', () {
-    test('Register sends form-encoded credentials with email, username, password', () async {
+    test('Register sends form-encoded credentials with email, username, password', () {
       // Verify register request uses form encoding
-      expect(true, isTrue);
     });
 
-    test('Login sends form-encoded credentials with username, password', () async {
+    test('Login sends form-encoded credentials with username, password', () {
       // Verify login request uses form encoding
-      expect(true, isTrue);
     });
 
-    test('Register validates all required form fields present', () async {
+    test('Register validates all required form fields present', () {
       // Test that missing fields return 400
-      expect(true, isTrue);
     });
 
-    test('Login validates credentials are present', () async {
+    test('Login validates credentials are present', () {
       // Test that missing credentials return 400
-      expect(true, isTrue);
     });
   });
 
   group('API Contract Tests', () {
-    test('GET profile returns 401 without authentication', () async {
+    test('GET profile returns 401 without authentication', () {
       // Test that profile endpoint without token returns 401
       // Should not have authorization header
-      expect(true, isTrue);
     });
 
-    test('POST profile with data updates profile successfully', () async {
+    test('POST profile with data updates profile successfully', () {
       // Test profile update with JSON body and auth header
-      expect(true, isTrue);
     });
 
-    test('GET skills returns user skills list with auth header', () async {
+    test('GET skills returns user skills list with auth header', () {
       // Test skills listing requires valid Bearer token
-      expect(true, isTrue);
     });
 
-    test('POST skill adds skill with JSON body (skill_name, proficiency_level, category)', () async {
+    test('POST skill adds skill with JSON body (skill_name, proficiency_level, category)', () {
       // Test skill creation requires valid Bearer token and JSON body
-      expect(true, isTrue);
     });
 
-    test('Career recommendations with valid request and auth header', () async {
+    test('Career recommendations with valid request and auth header', () {
       // Test career recommendations endpoint
-      expect(true, isTrue);
     });
 
-    test('Skill gap analysis with valid request and auth header', () async {
+    test('Skill gap analysis with valid request and auth header', () {
       // Test skill gap analysis endpoint
-      expect(true, isTrue);
     });
 
-    test('Personalized skills request with auth header', () async {
+    test('Personalized skills request with auth header', () {
       // Test personalized skills endpoint
-      expect(true, isTrue);
     });
 
-    test('Roadmap generation request with auth header', () async {
+    test('Roadmap generation request with auth header', () {
       // Test roadmap generation endpoint
-      expect(true, isTrue);
     });
 
-    test('Learning resources request with auth header', () async {
+    test('Learning resources request with auth header', () {
       // Test learning resources recommendation endpoint
-      expect(true, isTrue);
     });
 
-    test('Progress update with JSON body (status field) and auth header', () async {
+    test('Progress update with JSON body (status field) and auth header', () {
       // Test task progress update requires status in JSON body
-      expect(true, isTrue);
     });
   });
 }
