@@ -82,7 +82,7 @@ class APIClient {
   }
 
   static Future<Map<String, dynamic>> getProfile() async {
-    final uri = Uri.parse('$_baseUrl/api/users/me');
+    final uri = Uri.parse('$_baseUrl/api/profile');
     final response = await http.get(
       uri,
       headers: buildHeaders(),
@@ -97,15 +97,15 @@ class APIClient {
     required String degree,
     required String academicYear,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/users/me/profile');
+    final uri = Uri.parse('$_baseUrl/api/profile');
     final body = json.encode({
       'name': name,
       'institution': institution,
       'degree': degree,
-      'academicYear': academicYear,
+      'academic_year': academicYear,
     });
 
-    final response = await http.put(
+    final response = await http.post(
       uri,
       headers: buildHeaders(),
       body: body,
@@ -115,7 +115,7 @@ class APIClient {
   }
 
   static Future<List<dynamic>> getSkills() async {
-    final uri = Uri.parse('$_baseUrl/api/skills/me');
+    final uri = Uri.parse('$_baseUrl/api/skills');
     final response = await http.get(
       uri,
       headers: buildHeaders(),
@@ -129,10 +129,10 @@ class APIClient {
     required String skillName,
     required String proficiencyLevel,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/skills/me');
+    final uri = Uri.parse('$_baseUrl/api/skills');
     final body = json.encode({
-      'skillName': skillName,
-      'proficiencyLevel': proficiencyLevel,
+      'skill_name': skillName,
+      'proficiency_level': proficiencyLevel,
     });
 
     final response = await http.post(
@@ -144,22 +144,37 @@ class APIClient {
     return _handleResponse(response);
   }
 
-  static Future<Map<String, dynamic>> getCareerRecommendations() async {
+  static Future<Map<String, dynamic>> getCareerRecommendations({
+    required List<String> skills,
+    required Map<String, String> proficiency,
+    required String interests,
+    required String academicBackground,
+  }) async {
     final uri = Uri.parse('$_baseUrl/api/ai/career-recommendations');
-    final response = await http.get(
+    final body = json.encode({
+      'skills': skills,
+      'proficiency': proficiency,
+      'interests': interests,
+      'academic_background': academicBackground,
+    });
+
+    final response = await http.post(
       uri,
       headers: buildHeaders(),
+      body: body,
     );
 
     return _handleResponse(response);
   }
 
   static Future<Map<String, dynamic>> getSkillGapAnalysis({
-    required String careerId,
+    required List<dynamic> studentSkills,
+    required List<dynamic> requiredSkills,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/ai/skill-gap-analysis');
     final body = json.encode({
-      'careerId': careerId,
+      'student_skills': studentSkills,
+      'required_skills': requiredSkills,
     });
 
     final response = await http.post(
@@ -171,22 +186,43 @@ class APIClient {
     return _handleResponse(response);
   }
 
-  static Future<Map<String, dynamic>> getPersonalizedSkills() async {
+  static Future<Map<String, dynamic>> getPersonalizedSkills({
+    required List<String> existingSkills,
+    required String targetCareer,
+    required List<String> missingSkills,
+    required String learningGoals,
+  }) async {
     final uri = Uri.parse('$_baseUrl/api/ai/personalized-skills');
-    final response = await http.get(
+    final body = json.encode({
+      'existing_skills': existingSkills,
+      'target_career': targetCareer,
+      'missing_skills': missingSkills,
+      'learning_goals': learningGoals,
+    });
+
+    final response = await http.post(
       uri,
       headers: buildHeaders(),
+      body: body,
     );
 
     return _handleResponse(response);
   }
 
   static Future<Map<String, dynamic>> generateRoadmap({
-    required String careerId,
+    required List<dynamic> studentSkills,
+    required List<dynamic> careerRequirements,
+    required String interests,
+    required String academicBackground,
+    required String learningGoals,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/ai/roadmap-generate');
     final body = json.encode({
-      'careerId': careerId,
+      'student_skills': studentSkills,
+      'career_requirements': careerRequirements,
+      'interests': interests,
+      'academic_background': academicBackground,
+      'learning_goals': learningGoals,
     });
 
     final response = await http.post(
@@ -199,11 +235,13 @@ class APIClient {
   }
 
   static Future<List<dynamic>> getLearningResources({
-    required String taskId,
+    required String taskDescription,
+    required String skillFocus,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/learning-resources');
+    final uri = Uri.parse('$_baseUrl/api/ai/recommend-resources');
     final body = json.encode({
-      'taskId': taskId,
+      'task_description': taskDescription,
+      'skill_focus': skillFocus,
     });
 
     final response = await http.post(
@@ -220,9 +258,8 @@ class APIClient {
     required String taskId,
     required String status,
   }) async {
-    final uri = Uri.parse('$_baseUrl/api/task-progress');
+    final uri = Uri.parse('$_baseUrl/api/progress/$taskId');
     final body = json.encode({
-      'taskId': taskId,
       'status': status,
     });
 
