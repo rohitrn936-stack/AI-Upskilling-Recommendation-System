@@ -1,0 +1,39 @@
+# Flutter build artifacts
+.dart_tool/
+build/
+.flutter-plugins-dependencies
+
+# IDE files
+.vscode/
+.idea/
+
+# Shared preferences cache
+**/*.json.wiggle
+
+# Generated files
+**/generated*.dart
+
+# Sound null safety
+*.dart.js
+
+# Package manager
+.glide.yml
+pubspec.lock
+
+# Android
+/app/src/main/res/values/strings_gen.dart
+
+# iOS
+/ios/*.sym
+/ios/*.framework
+
+# macOS
+/macos/*.sym
+/macos/*.framework
+
+# Web
+/build/
+
+# Environment variables
+.env
+.env.local

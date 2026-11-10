@@ -27,10 +27,8 @@ def get_db():
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
-
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -48,7 +46,6 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode.update({"exp": expire})
     encoded_jwt = jose_jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
     return encoded_jwt
-
 def decode_access_token(token: str):
     try:
         payload = jose_jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
@@ -57,7 +54,6 @@ def decode_access_token(token: str):
         return None
     except jose_jwt.JWTError:
         return None
-
 def get_current_user(db: Session, token: str):
     payload = decode_access_token(token)
     if payload is None:
@@ -396,7 +392,6 @@ async def update_profile(
         "learning_goals": profile.learning_goals,
     }}}
 
-
 # Skill management endpoints
 @app.get("/api/skills")
 async def list_skills(
@@ -417,21 +412,30 @@ async def list_skills(
         })
     return {"success": True, "data": {"skills": skill_list}}
 
+# Updated: add_skill now uses JSON request body with skill_name, proficiency_level, category
 @app.post("/api/skills")
 async def add_skill(
-    skill_name: str = "",
-    proficiency: str = "beginner",
-    category: str = "",
+    skill_data: dict,
     current_user = Depends(get_current_user_dependency),
     db: Session = Depends(get_db),
 ):
-    """Add a skill for the current user."""
+    """Add a skill for the current user using JSON request body."""
     from app.database.models import StudentSkill
+
+    skill_name = skill_data.get("skill_name", "") if isinstance(skill_data, dict) else ""
+    proficiency_level = skill_data.get("proficiency_level", "beginner") if isinstance(skill_data, dict) else "beginner"
+    category = skill_data.get("category", "") if isinstance(skill_data, dict) else ""
+
+    if not skill_name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="skill_name is required",
+        )
 
     new_skill = StudentSkill(
         user_id=current_user.id,
-        skill_name=skill_name or "New skill",
-        proficiency_level=proficiency,
+        skill_name=skill_name,
+        proficiency_level=proficiency_level,
         category=category,
     )
     db.add(new_skill)
@@ -442,8 +446,7 @@ async def add_skill(
 @app.put("/api/skills/{skill_id}")
 async def update_skill(
     skill_id: int,
-    proficiency: str = "",
-    category: str = "",
+    skill_data: dict,
     current_user = Depends(get_current_user_dependency),
     db: Session = Depends(get_db),
 ):
@@ -461,10 +464,11 @@ async def update_skill(
             detail="Skill not found",
         )
 
-    if proficiency:
-        skill.proficiency_level = proficiency
-    if category:
-        skill.category = category
+    if skill_data and isinstance(skill_data, dict):
+        if "proficiency_level" in skill_data and skill_data["proficiency_level"]:
+            skill.proficiency_level = skill_data["proficiency_level"]
+        if "category" in skill_data and skill_data["category"]:
+            skill.category = skill_data["category"]
 
     db.commit()
 

@@ -1,8 +1,28 @@
+# Python
 __pycache__/
 *.py[cod]
-.env
-.env.*
-!.env.example
-.venv/
-venv/
+*$py.class
 .pytest_cache/
+venv/
+env/
+ENV/
+env.bak/
+**/.python-version
+
+# Flask/Django
+instance/
+.webassets-cache/
+.pyc
+
+# Alembic
+migrations/versions/*.pyv
+
+# Environment variables
+.env
+.env.example
+
+# FastAPI/Uvicorn
+.uwsgi
+
+# VS Code
+.vscode/
