@@ -2,17 +2,12 @@ from fastapi import FastAPI, HTTPException, Depends, status, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 import os
-import uvicorn
 
 from app.database.connection import SessionLocal, engine
 from app.database.models import Base
 from app.core.config import settings
 from app.services.ai.service import AIService
-
-# Database tables will be created via migrations
-# Base.metadata.create_all(bind=engine)  # Disabled - using migrations instead
 
 # Initialize AI service
 ai_service = AIService()
@@ -20,7 +15,70 @@ ai_service = AIService()
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-# Create FastAPI app
+# Dependency to get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# Password hashing
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+# JWT imports and utility
+from jose import jwt as jose_jwt
+import datetime
+from datetime import datetime, timedelta, timezone
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=int(settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jose_jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
+    return encoded_jwt
+
+def decode_access_token(token: str):
+    try:
+        payload = jose_jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
+        return payload
+    except jose_jwt.ExpiredSignatureError:
+        return None
+    except jose_jwt.JWTError:
+        return None
+
+def get_current_user(db: Session, token: str):
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+    username: str = payload.get("sub")
+    if username is None:
+        return None
+    from app.database.models import User
+    user = db.query(User).filter(User.username == username).first()
+    return user
+
+def get_current_user_dependency(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
+    user = get_current_user(db, token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    return user
+
+# Create FastAPI app FIRST
 app = FastAPI(
     title="AI-Powered Upskilling Recommendation System",
     description="Intelligent application that helps students identify suitable career opportunities based on their existing skills",
@@ -29,7 +87,7 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
-# CORS middleware
+# CORS middleware - AFTER app creation
 # Configure allowed origins via environment variable for security
 # Format: comma-separated list, e.g., "http://localhost:3000,http://localhost:8080"
 allowed_origins_str = os.environ.get("CORS_ORIGINS", "")
@@ -47,113 +105,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Dependency to get DB session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-# Password hashing
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-# JWT imports and utility
-# JWT authentication using python-jose (as declared in requirements)
-from jose import jwt as jose_jwt
-import datetime
-from datetime import datetime, timedelta, timezone
-
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=int(settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
-    encoded_jwt = jose_jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
-    return encoded_jwt
-
-
-def decode_access_token(token: str):
-    try:
-        payload = jose_jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-        return payload
-    except jose_jwt.ExpiredSignatureError:
-        return None
-    except jose_jwt.JWTError:
-        return None
-
-
-def get_current_user(db: Session, token: str):
-    payload = decode_access_token(token)
-    if payload is None:
-        return None
-    username: str = payload.get("sub")
-    if username is None:
-        return None
-    from app.database.models import User
-    user = db.query(User).filter(User.username == username).first()
-    return user
-
-
-@app.get("/")
-async def root():
-    """Root endpoint."""
-    return {"message": "AI-Powered Upskilling Recommendation System API", "version": "1.0.0"}
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    ai_status = "available" if ai_service.provider else "demo_mode"
-    return {
-        "status": "healthy",
-        "environment": settings.ENVIRONMENT,
-        "ai_provider": settings.AI_PROVIDER,
-        "ai_status": ai_status,
-    }
-
+# Now define Pydantic schemas and routes...
 
 # AI endpoints with Pydantic request validation
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 
-
 # Request/response schemas for career recommendations
 class CareerRecommendationRequest(BaseModel):
-    skills: List[str] = Field(default=[], description="List of student skills")
-    proficiency: Dict[str, str] = Field(default={}, description="Proficiency levels per skill")
+    skills: List[str] = Field(default_factory=list, description="List of student skills")
+    proficiency: Dict[str, str] = Field(default_factory=dict, description="Proficiency levels per skill")
     interests: str = Field(default="", description="Student's interests")
     academic_background: str = Field(default="", description="Student's academic background")
-
 
 class CareerRecommendationResponse(BaseModel):
     success: bool
     data: Optional[dict] = None
 
-
 @app.post("/api/ai/career-recommendations", response_model=CareerRecommendationResponse)
-async def career_recommendations(request: CareerRecommendationRequest, db: Session = Depends(get_db)):
+async def career_recommendations(request: CareerRecommendationRequest, current_user = Depends(get_current_user_dependency), db: Session = Depends(get_db)):
     """Get career recommendations based on student skills."""
     try:
         from app.database.models import User
-        # Get current user from DB if authenticated
-        user = None
 
         recommendations = await ai_service.get_career_recommendations(
             skills=request.skills,
@@ -168,20 +141,17 @@ async def career_recommendations(request: CareerRecommendationRequest, db: Sessi
             detail=f"Failed to generate career recommendations: {str(e)}",
         )
 
-
 # Request/response schemas for skill gap analysis
 class SkillGapAnalysisRequest(BaseModel):
-    student_skills: List[Dict[str, str]] = Field(default=[], description="Student's skills with proficiency")
-    required_skills: List[Dict[str, str]] = Field(default=[], description="Required skills for career")
-
+    student_skills: List[Dict[str, str]] = Field(default_factory=list, description="Student's skills with proficiency")
+    required_skills: List[Dict[str, str]] = Field(default_factory=list, description="Required skills for career")
 
 class SkillGapAnalysisResponse(BaseModel):
     success: bool
     data: Optional[dict] = None
 
-
 @app.post("/api/ai/skill-gap-analysis", response_model=SkillGapAnalysisResponse)
-async def skill_gap_analysis(request: SkillGapAnalysisRequest, db: Session = Depends(get_db)):
+async def skill_gap_analysis(request: SkillGapAnalysisRequest, current_user = Depends(get_current_user_dependency), db: Session = Depends(get_db)):
     """Analyze skill gaps between student skills and career requirements."""
     try:
         analysis = await ai_service.analyze_skill_gap(
@@ -195,22 +165,19 @@ async def skill_gap_analysis(request: SkillGapAnalysisRequest, db: Session = Dep
             detail=f"Failed to analyze skill gap: {str(e)}",
         )
 
-
 # Request/response schemas for personalized skills
 class PersonalizedSkillsRequest(BaseModel):
-    existing_skills: List[str] = Field(default=[], description="Student's current skills")
+    existing_skills: List[str] = Field(default_factory=list, description="Student's current skills")
     target_career: str = Field(default="", description="Target career path")
-    missing_skills: List[str] = Field(default=[], description="Identified missing skills")
+    missing_skills: List[str] = Field(default_factory=list, description="Identified missing skills")
     learning_goals: str = Field(default="", description="Student's learning goals")
-
 
 class PersonalizedSkillsResponse(BaseModel):
     success: bool
     data: Optional[dict] = None
 
-
 @app.post("/api/ai/personalized-skills", response_model=PersonalizedSkillsResponse)
-async def personalized_skills(request: PersonalizedSkillsRequest, db: Session = Depends(get_db)):
+async def personalized_skills(request: PersonalizedSkillsRequest, current_user = Depends(get_current_user_dependency), db: Session = Depends(get_db)):
     """Get personalized skill suggestions."""
     try:
         suggestions = await ai_service.generate_personalized_skills(
@@ -226,23 +193,20 @@ async def personalized_skills(request: PersonalizedSkillsRequest, db: Session = 
             detail=f"Failed to generate personalized skills: {str(e)}",
         )
 
-
 # Request/response schemas for roadmap generation
 class RoadmapGenerateRequest(BaseModel):
-    student_skills: List[Dict[str, str]] = Field(default=[], description="Student's current skills")
-    career_requirements: List[Dict[str, str]] = Field(default=[], description="Required skills for target career")
+    student_skills: List[Dict[str, str]] = Field(default_factory=list, description="Student's current skills")
+    career_requirements: List[Dict[str, str]] = Field(default_factory=list, description="Required skills for target career")
     interests: str = Field(default="", description="Student's interests")
     academic_background: str = Field(default="", description="Student's academic background")
     learning_goals: str = Field(default="", description="Student's learning goals")
-
 
 class RoadmapGenerateResponse(BaseModel):
     success: bool
     data: Optional[dict] = None
 
-
 @app.post("/api/ai/roadmap-generate", response_model=RoadmapGenerateResponse)
-async def generate_roadmap(request: RoadmapGenerateRequest, db: Session = Depends(get_db)):
+async def generate_roadmap(request: RoadmapGenerateRequest, current_user = Depends(get_current_user_dependency), db: Session = Depends(get_db)):
     """Generate a personalized learning roadmap."""
     try:
         roadmap = await ai_service.generate_learning_roadmap(
@@ -259,21 +223,18 @@ async def generate_roadmap(request: RoadmapGenerateRequest, db: Session = Depend
             detail=f"Failed to generate learning roadmap: {str(e)}",
         )
 
-
 # Request/response schemas for resource recommendations
 class ResourceRecommendationRequest(BaseModel):
     task_description: str = Field(..., description="Description of the task or skill to learn")
     skill_focus: str = Field(default="", description="The skill the resources focus on")
     resource_type: str = Field(default="mixed", description="Type of resources (video, article, course, book, mixed)")
 
-
 class ResourceRecommendationResponse(BaseModel):
     success: bool
     data: Optional[dict] = None
 
-
 @app.post("/api/ai/recommend-resources", response_model=ResourceRecommendationResponse)
-async def recommend_resources(request: ResourceRecommendationRequest, db: Session = Depends(get_db)):
+async def recommend_resources(request: ResourceRecommendationRequest, current_user = Depends(get_current_user_dependency), db: Session = Depends(get_db)):
     """Recommend learning resources for a task."""
     try:
         resources = await ai_service.recommend_learning_resources(
@@ -287,7 +248,6 @@ async def recommend_resources(request: ResourceRecommendationRequest, db: Sessio
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to recommend learning resources: {str(e)}",
         )
-
 
 # ============ AUTHENTICATION ENDPOINTS ============
 
@@ -324,7 +284,6 @@ async def register(
 
     return {"success": True, "data": {"id": new_user.id, "email": new_user.email, "username": new_user.username}}
 
-
 @app.post("/api/auth/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -350,19 +309,7 @@ async def login(
 
     return {"success": True, "data": {"access_token": access_token, "token_type": "bearer"}}
 
-
 # ============ PROTECTED ENDPOINTS ============
-
-# Dependency to get current user
-def get_current_user_dependency(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
-    user = get_current_user(db, token)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
-    return user
-
 
 # Profile schemas
 class ProfileUpdateRequest(BaseModel):
@@ -372,7 +319,6 @@ class ProfileUpdateRequest(BaseModel):
     academic_year: Optional[str] = None
     interests: Optional[str] = None
     learning_goals: Optional[str] = None
-
 
 @app.get("/api/profile")
 async def get_profile(
@@ -471,7 +417,6 @@ async def list_skills(
         })
     return {"success": True, "data": {"skills": skill_list}}
 
-
 @app.post("/api/skills")
 async def add_skill(
     skill_name: str = "",
@@ -493,7 +438,6 @@ async def add_skill(
     db.commit()
 
     return {"success": True, "data": {"message": f"Skill '{new_skill.skill_name}' added", "skill_id": new_skill.id}}
-
 
 @app.put("/api/skills/{skill_id}")
 async def update_skill(
@@ -526,7 +470,6 @@ async def update_skill(
 
     return {"success": True, "data": {"message": f"Skill {skill_id} updated"}}
 
-
 @app.delete("/api/skills/{skill_id}")
 async def delete_skill(
     skill_id: int,
@@ -552,7 +495,6 @@ async def delete_skill(
 
     return {"success": True, "data": {"message": f"Skill {skill_id} deleted"}}
 
-
 # Career endpoints
 @app.get("/api/careers")
 async def list_careers(
@@ -563,7 +505,6 @@ async def list_careers(
 
     careers = db.query(Career).all()
     return {"success": True, "data": {"careers": careers}}
-
 
 @app.get("/api/careers/{career_id}")
 async def get_career(
@@ -588,7 +529,6 @@ async def get_career(
         "average_salary": career.average_salary,
         "growth_outlook": career.growth_outlook,
     }}
-
 
 # Roadmap progress endpoints
 @app.get("/api/progress")
@@ -618,7 +558,6 @@ async def get_progress(
             for t in tasks
         ]
     }}
-
 
 @app.post("/api/progress/{task_id}")
 async def update_progress(
@@ -650,6 +589,13 @@ async def update_progress(
 
     return {"success": True, "data": {"message": f"Task {task_id} marked as {status}"}}
 
+@app.get("/")
+async def root():
+    return {"message": "AI-Powered Upskilling Recommendation System"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "environment": "development", "ai_provider": "gemini", "ai_status": "demo_mode"}
 
 # Demo endpoint for when no API key is configured
 @app.get("/api/demo-mode")
@@ -661,7 +607,6 @@ async def demo_mode():
         "demo_mode": ai_service_demo.provider is None,
         "message": "Running in demo mode - AI provider not configured" if ai_service_demo.provider is None else "AI provider configured"
     }
-
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

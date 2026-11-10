@@ -43,8 +43,8 @@ class GeminiProvider(AIProvider):
 
     async def generate(self, prompt: str, response_model: Optional[type] = None) -> Any:
         """Generate text using Gemini API."""
-        if not self.api_key or not self.model:
-            raise ValueError("Gemini API key not configured")
+        if not self.api_key:
+            raise AIProviderError("Gemini API key not configured")
 
         try:
             loop = asyncio.get_event_loop()
@@ -69,7 +69,7 @@ class GeminiProvider(AIProvider):
                         pass
                 return text
             else:
-                raise ValueError("Empty response from Gemini")
+                raise AIProviderError("Empty response from Gemini")
                 
         except Exception as e:
             raise AIProviderError(f"Gemini generation error: {str(e)}")
@@ -101,7 +101,7 @@ class OllamaProvider(AIProvider):
         self.model_name = config.get("model", "")
         
         if not self.model_name:
-            raise ValueError("Ollama model name must be configured")
+            raise AIProviderError("Ollama model name must be configured")
 
     async def generate(self, prompt: str, response_model: Optional[type] = None) -> Any:
         """Generate text using Ollama locally hosted LLM."""
@@ -174,7 +174,7 @@ class CompatibleProvider(AIProvider):
         self.model_name = config.get("model", "")
         
         if not self.model_name or not self.base_url:
-            raise ValueError("Compatible provider must have base_url and model configured")
+            raise AIProviderError("Compatible provider must have base_url and model configured")
 
     async def generate(self, prompt: str, response_model: Optional[type] = None) -> Any:
         """Generate text using compatible API provider."""

@@ -33,10 +33,13 @@ class AIService:
     def _build_config(self) -> Dict[str, Any]:
         """Build the AI provider configuration from environment settings."""
         return {
+            "provider": settings.AI_PROVIDER,
+            "model": settings.AI_MODEL,
+            "api_key": settings.AI_API_KEY,
+            "base_url": settings.AI_BASE_URL,
             "temperature": settings.AI_TEMPERATURE,
             "timeout": settings.AI_TIMEOUT,
             "max_retries": settings.AI_MAX_RETRIES,
-            "api_key": settings.AI_API_KEY,
         }
     
     def _initialize_provider(self) -> None:

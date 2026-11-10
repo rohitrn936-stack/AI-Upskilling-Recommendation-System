@@ -13,10 +13,10 @@ class Settings(BaseSettings):
     AI_MAX_RETRIES: int = Field(default=3, env="AI_MAX_RETRIES")
 
     # Database
-    DATABASE_URL: str = Field(default="postgresql://rohitrnaik:@localhost:5432/upskilling", env="DATABASE_URL")
+    DATABASE_URL: str = Field(env="DATABASE_URL")
 
     # JWT
-    JWT_SECRET_KEY: str = Field(default="your-jwt-secret-key-change-in-production", env="JWT_SECRET_KEY")
+    JWT_SECRET_KEY: str = Field(env="JWT_SECRET_KEY")
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
 
     # Environment
