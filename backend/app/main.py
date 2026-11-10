@@ -402,7 +402,7 @@ async def update_profile(
         "academic_year": profile.academic_year,
         "interests": profile.interests,
         "learning_goals": profile.learning_goals,
-    }}
+    }}}
 
 
 # Skill management endpoints
@@ -415,16 +415,15 @@ async def list_skills(
     from app.database.models import StudentSkill
     
     skills = db.query(StudentSkill).filter(StudentSkill.user_id == current_user.id).all()
-    return {"success": True, "data": {
-        "skills": [
-            {
-                "id": skill.id,
-                "skill_name": skill.skill_name,
-                "proficiency_level": skill.proficiency_level,
-                "category": skill.category,
-            } for skill in skills
-        ]
-    }}
+    skill_list = []
+    for skill in skills:
+        skill_list.append({
+            "id": skill.id,
+            "skill_name": skill.skill_name,
+            "proficiency_level": skill.proficiency_level,
+            "category": skill.category,
+        })
+    return {"success": True, "data": {"skills": skill_list}}
 
 
 @app.post("/api/skills")
@@ -517,18 +516,7 @@ async def list_careers(
     from app.database.models import Career
     
     careers = db.query(Career).all()
-    return {"success": True, "data": {
-        "careers": [
-            {
-                "id": c.id,
-                "name": c.name,
-                "description": c.description,
-                "category": c.category,
-                "average_salary": c.average_salary,
-                "growth_outlook": c.growth_outlook,
-            } for c in careers
-        ]
-    }}
+    return {"success": True, "data": {"careers": careers}}
 
 
 @app.get("/api/careers/{career_id}")
@@ -580,10 +568,8 @@ async def get_progress(
         "total": total_tasks,
         "percentage": percentage,
         "task_details": [
-            {
-                "task_id": t.task_id,
-                "status": t.status,
-            } for t in tasks
+            {"task_id": t.task_id, "status": t.status}
+            for t in tasks
         ]
     }}
 
