@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+import os
 import uvicorn
 
 from app.database.connection import SessionLocal, engine
@@ -29,9 +30,18 @@ app = FastAPI(
 )
 
 # CORS middleware
+# Configure allowed origins via environment variable for security
+# Format: comma-separated list, e.g., "http://localhost:3000,http://localhost:8080"
+allowed_origins_str = os.environ.get("CORS_ORIGINS", "")
+if allowed_origins_str:
+    allow_origins = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
+else:
+    # Default to localhost for development
+    allow_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,50 +72,43 @@ def get_password_hash(password: str) -> str:
 
 
 # JWT imports and utility
-try:
-    import jwt
-    import datetime
-    
-    def create_access_token(data: dict, expires_delta: datetime.timedelta = None):
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-        to_encode.update({"exp": expire})
-        encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
-        return encoded_jwt
-    
-    def decode_access_token(token: str):
-        try:
-            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
-            return payload
-        except jwt.ExpiredSignatureError:
-            return None
-        except jwt.JWTError:
-            return None
-    
-    def get_current_user(db: Session, token: str):
-        payload = decode_access_token(token)
-        if payload is None:
-            return None
-        username: str = payload.get("sub")
-        if username is None:
-            return None
-        from app.database.models import User
-        user = db.query(User).filter(User.username == username).first()
-        return user
-    
-except ImportError:
-    # JWT not available, simplified auth
-    def create_access_token(data: dict, expires_delta=None):
-        return "demo-token"
-    
-    def decode_access_token(token: str):
+# JWT authentication using python-jose (as declared in requirements)
+from jose import jwt as jose_jwt
+import datetime
+from datetime import datetime, timedelta, timezone
+
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=int(settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jose_jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm="HS256")
+    return encoded_jwt
+
+
+def decode_access_token(token: str):
+    try:
+        payload = jose_jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=["HS256"])
+        return payload
+    except jose_jwt.ExpiredSignatureError:
         return None
-    
-    def get_current_user(db: Session, token: str):
+    except jose_jwt.JWTError:
         return None
+
+
+def get_current_user(db: Session, token: str):
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+    username: str = payload.get("sub")
+    if username is None:
+        return None
+    from app.database.models import User
+    user = db.query(User).filter(User.username == username).first()
+    return user
 
 
 @app.get("/")
@@ -126,39 +129,37 @@ async def health_check():
     }
 
 
-# AI endpoints
-@app.get("/api/ai/status")
-async def ai_status():
-    """Get AI service status."""
-    return {
-        "provider": settings.AI_PROVIDER,
-        "model": settings.AI_MODEL,
-        "available": ai_service.provider is not None,
-        "demo_mode": ai_service.provider is None,
-    }
+# AI endpoints with Pydantic request validation
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional
 
 
-@app.post("/api/ai/career-recommendations")
-async def career_recommendations(
-    skills: list,
-    proficiency: dict = {},
-    interests: str = "",
-    academic_background: str = "",
-    db: Session = Depends(get_db),
-):
+# Request/response schemas for career recommendations
+class CareerRecommendationRequest(BaseModel):
+    skills: List[str] = Field(default=[], description="List of student skills")
+    proficiency: Dict[str, str] = Field(default={}, description="Proficiency levels per skill")
+    interests: str = Field(default="", description="Student's interests")
+    academic_background: str = Field(default="", description="Student's academic background")
+
+
+class CareerRecommendationResponse(BaseModel):
+    success: bool
+    data: Optional[dict] = None
+
+
+@app.post("/api/ai/career-recommendations", response_model=CareerRecommendationResponse)
+async def career_recommendations(request: CareerRecommendationRequest, db: Session = Depends(get_db)):
     """Get career recommendations based on student skills."""
     try:
-        from sqlalchemy import select
         from app.database.models import User
         # Get current user from DB if authenticated
         user = None
-        token = None  # Would be extracted from auth header in full implementation
-        
+
         recommendations = await ai_service.get_career_recommendations(
-            skills=skills,
-            proficiency_levels=proficiency,
-            interests=interests,
-            academic_background=academic_background,
+            skills=request.skills,
+            proficiency_levels=request.proficiency,
+            interests=request.interests,
+            academic_background=request.academic_background,
         )
         return {"success": True, "data": recommendations}
     except Exception as e:
@@ -168,17 +169,24 @@ async def career_recommendations(
         )
 
 
-@app.post("/api/ai/skill-gap-analysis")
-async def skill_gap_analysis(
-    student_skills: list,
-    required_skills: list,
-    db: Session = Depends(get_db),
-):
+# Request/response schemas for skill gap analysis
+class SkillGapAnalysisRequest(BaseModel):
+    student_skills: List[Dict[str, str]] = Field(default=[], description="Student's skills with proficiency")
+    required_skills: List[Dict[str, str]] = Field(default=[], description="Required skills for career")
+
+
+class SkillGapAnalysisResponse(BaseModel):
+    success: bool
+    data: Optional[dict] = None
+
+
+@app.post("/api/ai/skill-gap-analysis", response_model=SkillGapAnalysisResponse)
+async def skill_gap_analysis(request: SkillGapAnalysisRequest, db: Session = Depends(get_db)):
     """Analyze skill gaps between student skills and career requirements."""
     try:
         analysis = await ai_service.analyze_skill_gap(
-            student_skills=[{"skill_name": s, "proficiency": p} for s, p in student_skills],
-            required_skills=[{"skill_name": s, "proficiency_required": p} for s, p in required_skills],
+            student_skills=request.student_skills,
+            required_skills=request.required_skills,
         )
         return {"success": True, "data": analysis}
     except Exception as e:
@@ -188,21 +196,28 @@ async def skill_gap_analysis(
         )
 
 
-@app.post("/api/ai/personalized-skills")
-async def personalized_skills(
-    existing_skills: list,
-    target_career: str,
-    missing_skills: list = [],
-    learning_goals: str = "",
-    db: Session = Depends(get_db),
-):
+# Request/response schemas for personalized skills
+class PersonalizedSkillsRequest(BaseModel):
+    existing_skills: List[str] = Field(default=[], description="Student's current skills")
+    target_career: str = Field(default="", description="Target career path")
+    missing_skills: List[str] = Field(default=[], description="Identified missing skills")
+    learning_goals: str = Field(default="", description="Student's learning goals")
+
+
+class PersonalizedSkillsResponse(BaseModel):
+    success: bool
+    data: Optional[dict] = None
+
+
+@app.post("/api/ai/personalized-skills", response_model=PersonalizedSkillsResponse)
+async def personalized_skills(request: PersonalizedSkillsRequest, db: Session = Depends(get_db)):
     """Get personalized skill suggestions."""
     try:
         suggestions = await ai_service.generate_personalized_skills(
-            existing_skills=existing_skills,
-            target_career=target_career,
-            missing_skills=missing_skills,
-            learning_goals=learning_goals,
+            existing_skills=request.existing_skills,
+            target_career=request.target_career,
+            missing_skills=request.missing_skills,
+            learning_goals=request.learning_goals,
         )
         return {"success": True, "data": suggestions}
     except Exception as e:
@@ -212,23 +227,30 @@ async def personalized_skills(
         )
 
 
-@app.post("/api/ai/roadmap-generate")
-async def generate_roadmap(
-    student_skills: list,
-    career_requirements: list,
-    interests: str = "",
-    academic_background: str = "",
-    learning_goals: str = "",
-    db: Session = Depends(get_db),
-):
+# Request/response schemas for roadmap generation
+class RoadmapGenerateRequest(BaseModel):
+    student_skills: List[Dict[str, str]] = Field(default=[], description="Student's current skills")
+    career_requirements: List[Dict[str, str]] = Field(default=[], description="Required skills for target career")
+    interests: str = Field(default="", description="Student's interests")
+    academic_background: str = Field(default="", description="Student's academic background")
+    learning_goals: str = Field(default="", description="Student's learning goals")
+
+
+class RoadmapGenerateResponse(BaseModel):
+    success: bool
+    data: Optional[dict] = None
+
+
+@app.post("/api/ai/roadmap-generate", response_model=RoadmapGenerateResponse)
+async def generate_roadmap(request: RoadmapGenerateRequest, db: Session = Depends(get_db)):
     """Generate a personalized learning roadmap."""
     try:
         roadmap = await ai_service.generate_learning_roadmap(
-            student_skills=[{"skill_name": s, "proficiency": p} for s, p in student_skills],
-            career_requirements=[{"skill_name": s, "proficiency_required": p} for s, p in career_requirements],
-            interests=interests,
-            academic_background=academic_background,
-            learning_goals=learning_goals,
+            student_skills=request.student_skills,
+            career_requirements=request.career_requirements,
+            interests=request.interests,
+            academic_background=request.academic_background,
+            learning_goals=request.learning_goals,
         )
         return {"success": True, "data": roadmap}
     except Exception as e:
@@ -238,19 +260,26 @@ async def generate_roadmap(
         )
 
 
-@app.post("/api/ai/recommend-resources")
-async def recommend_resources(
-    task_description: str,
-    skill_focus: str = "",
-    resource_type: str = "mixed",
-    db: Session = Depends(get_db),
-):
+# Request/response schemas for resource recommendations
+class ResourceRecommendationRequest(BaseModel):
+    task_description: str = Field(..., description="Description of the task or skill to learn")
+    skill_focus: str = Field(default="", description="The skill the resources focus on")
+    resource_type: str = Field(default="mixed", description="Type of resources (video, article, course, book, mixed)")
+
+
+class ResourceRecommendationResponse(BaseModel):
+    success: bool
+    data: Optional[dict] = None
+
+
+@app.post("/api/ai/recommend-resources", response_model=ResourceRecommendationResponse)
+async def recommend_resources(request: ResourceRecommendationRequest, db: Session = Depends(get_db)):
     """Recommend learning resources for a task."""
     try:
         resources = await ai_service.recommend_learning_resources(
-            task_description=task_description,
-            skill_focus=skill_focus,
-            resource_type=resource_type,
+            task_description=request.task_description,
+            skill_focus=request.skill_focus,
+            resource_type=request.resource_type,
         )
         return {"success": True, "data": resources}
     except Exception as e:
@@ -271,7 +300,7 @@ async def register(
 ):
     """User registration with password hashing."""
     from app.database.models import User
-    
+
     # Check if user already exists
     existing_user = db.query(User).filter(
         (User.email == email) | (User.username == username)
@@ -281,7 +310,7 @@ async def register(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email or username already registered",
         )
-    
+
     # Create new user with hashed password
     hashed_password = get_password_hash(password)
     new_user = User(
@@ -292,7 +321,7 @@ async def register(
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    
+
     return {"success": True, "data": {"id": new_user.id, "email": new_user.email, "username": new_user.username}}
 
 
@@ -303,22 +332,22 @@ async def login(
 ):
     """User login with JWT token."""
     from app.database.models import User
-    
+
     # Find user by username
     user = db.query(User).filter(User.username == form_data.username).first()
-    
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Create access token
     access_token = create_access_token(
         data={"sub": user.username}
     )
-    
+
     return {"success": True, "data": {"access_token": access_token, "token_type": "bearer"}}
 
 
@@ -335,6 +364,16 @@ def get_current_user_dependency(db: Session = Depends(get_db), token: str = Depe
     return user
 
 
+# Profile schemas
+class ProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    institution: Optional[str] = None
+    degree: Optional[str] = None
+    academic_year: Optional[str] = None
+    interests: Optional[str] = None
+    learning_goals: Optional[str] = None
+
+
 @app.get("/api/profile")
 async def get_profile(
     current_user = Depends(get_current_user_dependency),
@@ -342,12 +381,13 @@ async def get_profile(
 ):
     """Get current student profile."""
     from app.database.models import StudentProfile
-    
+
     profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
+
     if not profile:
         # Return default profile if none exists
         return {"success": True, "data": {"name": current_user.username, "email": current_user.email, "skills": []}}
-    
+
     return {"success": True, "data": {
         "id": profile.id,
         "name": profile.name,
@@ -362,38 +402,44 @@ async def get_profile(
 
 @app.post("/api/profile")
 async def update_profile(
-    profile_data: dict,
+    profile_data: ProfileUpdateRequest,
     current_user = Depends(get_current_user_dependency),
     db: Session = Depends(get_db),
 ):
     """Update student profile."""
     from app.database.models import StudentProfile
-    
+
     profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
-    
+
     if not profile:
         from datetime import datetime
         profile = StudentProfile(
             user_id=current_user.id,
-            name=profile_data.get("name", current_user.username),
-            institution=profile_data.get("institution", ""),
-            degree=profile_data.get("degree", ""),
-            academic_year=profile_data.get("academic_year", ""),
-            interests=profile_data.get("interests", ""),
-            learning_goals=profile_data.get("learning_goals", ""),
+            name=profile_data.name or current_user.username,
+            institution=profile_data.institution or "",
+            degree=profile_data.degree or "",
+            academic_year=profile_data.academic_year or "",
+            interests=profile_data.interests or "",
+            learning_goals=profile_data.learning_goals or "",
         )
         db.add(profile)
     else:
-        profile.name = profile_data.get("name", profile.name)
-        profile.institution = profile_data.get("institution", profile.institution)
-        profile.degree = profile_data.get("degree", profile.degree)
-        profile.academic_year = profile_data.get("academic_year", profile.academic_year)
-        profile.interests = profile_data.get("interests", profile.interests)
-        profile.learning_goals = profile_data.get("learning_goals", profile.learning_goals)
-    
+        if profile_data.name is not None:
+            profile.name = profile_data.name
+        if profile_data.institution is not None:
+            profile.institution = profile_data.institution
+        if profile_data.degree is not None:
+            profile.degree = profile_data.degree
+        if profile_data.academic_year is not None:
+            profile.academic_year = profile_data.academic_year
+        if profile_data.interests is not None:
+            profile.interests = profile_data.interests
+        if profile_data.learning_goals is not None:
+            profile.learning_goals = profile_data.learning_goals
+
     db.commit()
     db.refresh(profile)
-    
+
     return {"success": True, "data": {"message": "Profile updated successfully", "profile": {
         "id": profile.id,
         "name": profile.name,
@@ -413,7 +459,7 @@ async def list_skills(
 ):
     """List student's skills."""
     from app.database.models import StudentSkill
-    
+
     skills = db.query(StudentSkill).filter(StudentSkill.user_id == current_user.id).all()
     skill_list = []
     for skill in skills:
@@ -428,7 +474,7 @@ async def list_skills(
 
 @app.post("/api/skills")
 async def add_skill(
-    skill_name: str,
+    skill_name: str = "",
     proficiency: str = "beginner",
     category: str = "",
     current_user = Depends(get_current_user_dependency),
@@ -436,17 +482,17 @@ async def add_skill(
 ):
     """Add a skill for the current user."""
     from app.database.models import StudentSkill
-    
+
     new_skill = StudentSkill(
         user_id=current_user.id,
-        skill_name=skill_name,
+        skill_name=skill_name or "New skill",
         proficiency_level=proficiency,
         category=category,
     )
     db.add(new_skill)
     db.commit()
-    
-    return {"success": True, "data": {"message": f"Skill '{skill_name}' added", "skill_id": new_skill.id}}
+
+    return {"success": True, "data": {"message": f"Skill '{new_skill.skill_name}' added", "skill_id": new_skill.id}}
 
 
 @app.put("/api/skills/{skill_id}")
@@ -459,25 +505,25 @@ async def update_skill(
 ):
     """Update a skill for the current user."""
     from app.database.models import StudentSkill
-    
+
     skill = db.query(StudentSkill).filter(
-        StudentSkill.id == skill_id, 
+        StudentSkill.id == skill_id,
         StudentSkill.user_id == current_user.id
     ).first()
-    
+
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Skill not found",
         )
-    
+
     if proficiency:
         skill.proficiency_level = proficiency
     if category:
         skill.category = category
-    
+
     db.commit()
-    
+
     return {"success": True, "data": {"message": f"Skill {skill_id} updated"}}
 
 
@@ -489,21 +535,21 @@ async def delete_skill(
 ):
     """Delete a skill for the current user."""
     from app.database.models import StudentSkill
-    
+
     skill = db.query(StudentSkill).filter(
-        StudentSkill.id == skill_id, 
+        StudentSkill.id == skill_id,
         StudentSkill.user_id == current_user.id
     ).first()
-    
+
     if not skill:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Skill not found",
         )
-    
+
     db.delete(skill)
     db.commit()
-    
+
     return {"success": True, "data": {"message": f"Skill {skill_id} deleted"}}
 
 
@@ -514,7 +560,7 @@ async def list_careers(
 ):
     """List available careers."""
     from app.database.models import Career
-    
+
     careers = db.query(Career).all()
     return {"success": True, "data": {"careers": careers}}
 
@@ -526,14 +572,14 @@ async def get_career(
 ):
     """Get career details."""
     from app.database.models import Career
-    
+
     career = db.query(Career).filter(Career.id == career_id).first()
     if not career:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Career not found",
         )
-    
+
     return {"success": True, "data": {
         "id": career.id,
         "name": career.name,
@@ -552,17 +598,17 @@ async def get_progress(
 ):
     """Get learning progress."""
     from app.database.models import TaskProgress, RoadmapTask, LearningRoadmap
-    
+
     # Get all tasks for this user
     tasks = db.query(TaskProgress).filter(TaskProgress.user_id == current_user.id).all()
     total_tasks = db.query(RoadmapTask).join(LearningRoadmap).filter(
         LearningRoadmap.user_id == current_user.id
     ).count()
-    
+
     completed_tasks = sum(1 for t in tasks if t.status == "completed")
-    
+
     percentage = int(completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
-    
+
     return {"success": True, "data": {
         "completed": completed_tasks,
         "total": total_tasks,
@@ -583,12 +629,12 @@ async def update_progress(
 ):
     """Update task progress."""
     from app.database.models import TaskProgress
-    
+
     progress = db.query(TaskProgress).filter(
         TaskProgress.user_id == current_user.id,
         TaskProgress.task_id == task_id
     ).first()
-    
+
     if not progress:
         progress = TaskProgress(
             user_id=current_user.id,
@@ -599,9 +645,9 @@ async def update_progress(
     else:
         progress.status = status
         progress.updated_at = datetime.utcnow() if hasattr(progress, 'updated_at') else None
-    
+
     db.commit()
-    
+
     return {"success": True, "data": {"message": f"Task {task_id} marked as {status}"}}
 
 
