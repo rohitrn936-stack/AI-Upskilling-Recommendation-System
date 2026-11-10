@@ -1,0 +1,20 @@
+# Core dependencies
+fastapi==0.111.1
+uvicorn[standard]==0.27.3
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+pydantic==2.7.4
+pydantic-settings==2.2.1
+sqlalchemy==2.0.29
+alembic==1.13.1
+psycopg2-binary==2.9.9
+dio==5.4.3
+riverpod==2.7.1
+go_router==14.2.0
+
+# AI dependencies
+google-generativeai==0.3.2
+ollama==0.0.5
+
+# Utilities
+python-dotenv==1.0.0
