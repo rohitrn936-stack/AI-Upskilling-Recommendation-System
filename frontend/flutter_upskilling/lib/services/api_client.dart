@@ -5,7 +5,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class APIClient {
   // Base URL for the FastAPI backend
-  static const String _baseUrl = 'http://10.0.2.2:8000';
+  // Platform-specific configuration:
+  //   Android emulator: -DFLUTTER_API_BASE_URL=http://10.0.2.2:8000
+  //   iOS simulator:    -DFLUTTER_API_BASE_URL=http://127.0.0.1:8000
+  //   macOS desktop:    -DFLUTTER_API_BASE_URL=http://127.0.0.1:8000
+  //   Physical device:  set via CI/CD or run flags
+  //   Override with: export FLUTTER_API_BASE_URL=<your-host>:8000
+  static const String _baseUrl = String.fromEnvironment('FLUTTER_API_BASE_URL', defaultValue: 'http://10.0.2.2:8000');
 
   // JWT token storage key
   static const String _tokenKey = 'jwt_token';
@@ -25,10 +31,10 @@ class APIClient {
     await prefs.remove(_tokenKey);
   }
 
-  static Map<String, String> buildHeaders({String? token}) {
+  static Map<String, String> buildHeaders({String? token, String contentType = 'application/json'}) {
     final t = token ?? _getCachedToken();
     final Map<String, String> headers = {
-      'Content-Type': 'application/json',
+      'Content-Type': contentType,
     };
     if (t != null) {
       headers['Authorization'] = 'Bearer $t';
@@ -47,35 +53,24 @@ class APIClient {
     required String password,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/auth/register');
-    final body = json.encode({
-      'email': email,
-      'username': username,
-      'password': password,
-    });
-
     final response = await http.post(
       uri,
-      headers: buildHeaders(),
-      body: body,
+      headers: buildHeaders(contentType: 'application/x-www-form-urlencoded'),
+      body: {'email': email, 'username': username, 'password': password},
     );
 
     return _handleResponse(response);
   }
 
   static Future<Map<String, dynamic>> login({
-    required String email,
+    required String username,
     required String password,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/auth/login');
-    final body = json.encode({
-      'email': email,
-      'password': password,
-    });
-
     final response = await http.post(
       uri,
-      headers: buildHeaders(),
-      body: body,
+      headers: buildHeaders(contentType: 'application/x-www-form-urlencoded'),
+      body: {'username': username, 'password': password},
     );
 
     return _handleResponse(response);
