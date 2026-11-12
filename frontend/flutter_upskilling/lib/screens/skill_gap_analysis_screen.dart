@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:upskilling/main.dart';
+import 'package:upskilling/services/api_client.dart';
+import 'package:upskilling/widgets/app_bar.dart';
+import 'package:upskilling/widgets/app_theme.dart';
+import 'package:upskilling/widgets/loading_indicator.dart';
 
 class SkillGapAnalysisScreen extends StatefulWidget {
   const SkillGapAnalysisScreen({super.key});
@@ -10,208 +13,440 @@ class SkillGapAnalysisScreen extends StatefulWidget {
 }
 
 class _SkillGapAnalysisScreenState extends State<SkillGapAnalysisScreen> {
+  bool _isLoading = true;
+  bool _isGeneratingRoadmap = false;
+  bool _initialized = false;
+  String? _error;
+
+  String _targetCareer = 'Software Engineer';
+  int _matchPercentage = 0;
+  List<String> _studentSkillNames = [];
+  List<Map<String, String>> _studentSkillObjects = [];
+  List<Map<String, String>> _requiredSkillObjects = [];
+  List<String> _existingSkills = [];
+  List<String> _requiredSkills = [];
+  List<String> _missingSkills = [];
+  String _aiInterpretation = '';
+  String _interests = '';
+  String _academicBackground = '';
+  String _learningGoals = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _initialized = true;
+      final args = GoRouterState.of(context).extra as Map<String, dynamic>?;
+      if (args != null) {
+        if (args['career'] != null) {
+          _targetCareer = args['career'].toString();
+        }
+        if (args['requiredSkills'] is List) {
+          _requiredSkills =
+              (args['requiredSkills'] as List).map((e) => e.toString()).toList();
+        }
+      }
+      if (_requiredSkills.isEmpty) {
+        _requiredSkills = [
+          'Python',
+          'JavaScript',
+          'Data Structures',
+          'SQL',
+          'Git',
+          'System Design'
+        ];
+      }
+      _loadAnalysis();
+    }
+  }
+
+  Future<void> _loadAnalysis() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final results = await Future.wait([
+        APIClient.getSkills(),
+        APIClient.getProfile(),
+      ]);
+
+      final rawSkills = results[0] as List<dynamic>;
+      final profile =
+          (results[1] as Map<String, dynamic>)['data'] as Map<String, dynamic>? ??
+              {};
+
+      _studentSkillNames = rawSkills
+          .map((s) => (s['skill_name'] ?? '').toString())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      _studentSkillObjects = rawSkills
+          .map((s) => {
+                'skill_name': (s['skill_name'] ?? '').toString(),
+                'proficiency':
+                    (s['proficiency_level'] ?? 'Intermediate').toString(),
+              })
+          .where((m) => m['skill_name']!.isNotEmpty)
+          .toList();
+
+      _requiredSkillObjects = _requiredSkills
+          .map((r) => {'skill_name': r, 'proficiency_required': 'Intermediate'})
+          .toList();
+
+      _interests = (profile['interests'] ?? '').toString();
+      _learningGoals = (profile['learning_goals'] ?? '').toString();
+      final degree = (profile['degree'] ?? '').toString();
+      final year = (profile['academic_year'] ?? '').toString();
+      _academicBackground =
+          [degree, year].where((e) => e.isNotEmpty).join(', ');
+
+      final response = await APIClient.getSkillGapAnalysis(
+        studentSkills: _studentSkillObjects,
+        requiredSkills: _requiredSkillObjects,
+      );
+      final data = response['data'] as Map<String, dynamic>? ?? {};
+
+      if (!mounted) return;
+      setState(() {
+        _matchPercentage = (data['match_percentage'] as num?)?.toInt() ?? 0;
+        _existingSkills = (data['existing_skills'] as List<dynamic>? ?? [])
+            .map((e) => e.toString())
+            .toList();
+        _missingSkills = (data['missing_skills'] as List<dynamic>? ?? [])
+            .map((e) => e.toString())
+            .toList();
+        _aiInterpretation = (data['ai_interpretation'] ?? '').toString();
+      });
+    } catch (e) {
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      if (msg.toLowerCase().contains('unauthorized')) {
+        if (mounted) context.go('/login');
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _error = msg);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _generateRoadmap() async {
+    setState(() => _isGeneratingRoadmap = true);
+    try {
+      await APIClient.generateRoadmap(
+        studentSkills: _studentSkillObjects,
+        careerRequirements: _requiredSkillObjects,
+        interests: _interests,
+        academicBackground: _academicBackground,
+        learningGoals: _learningGoals.isNotEmpty
+            ? _learningGoals
+            : 'Prepare for $_targetCareer',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Learning roadmap generated!'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+      context.go('/learning-roadmap');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: AppColors.danger,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingRoadmap = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Skill Gap Analysis'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/career-details'),
-        ),
+      appBar: AppBarWidget(
+        title: 'Skill Gap Analysis',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Re-run Analysis',
+            onPressed: _loadAnalysis,
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Skill Gap Analysis',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF6750A4),
-              ),
-            ),
-            const SizedBox(height: 30),
-            _buildMatchPercentage(),
-            const SizedBox(height: 30),
-            _buildSkillsComparison(),
-            const SizedBox(height: 30),
-            _buildAiInterpretation(),
-            const Spacer(),
-            _buildGenerateRoadmapButton(),
-          ],
-        ),
-      ),
+      body: _isLoading
+          ? const LoadingIndicator(message: 'Analyzing skill gaps...')
+          : _error != null
+              ? ErrorMessage(message: _error!, onRetry: _loadAnalysis)
+              : PageContainer(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SectionHeader(
+                        title: 'Skill Gap: $_targetCareer',
+                        subtitle:
+                            'Comparison of your saved competencies against target role requirements.',
+                      ),
+                      const SizedBox(height: 24),
+                      _buildMatchPercentageCard(),
+                      const SizedBox(height: 20),
+                      _buildSkillsComparison(),
+                      const SizedBox(height: 20),
+                      _buildAiInterpretation(),
+                      const SizedBox(height: 24),
+                      _buildActionRow(),
+                    ],
+                  ),
+                ),
     );
   }
 
-  Widget _buildMatchPercentage() {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: <Widget>[
-            const Text(
-              'Skill Match Percentage',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF6750A4),
+  Widget _buildMatchPercentageCard() {
+    final label = _matchPercentage >= 75
+        ? 'Strong match'
+        : _matchPercentage >= 50
+            ? 'Moderate match'
+            : 'Needs upskilling';
+    final labelColor = _matchPercentage >= 75
+        ? AppColors.success
+        : _matchPercentage >= 50
+            ? AppColors.secondary
+            : AppColors.warning;
+
+    return AppCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Role Readiness Score',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_existingSkills.length} matching • ${_missingSkills.length} to learn',
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            LinearProgressIndicator(
-              value: 0.58,
-              backgroundColor: Colors.grey[200],
-              color: Color(0xFF6750A4),
-              minHeight: 20,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: <Widget>[
-                const Text(
-                  '58%',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                  ),
+              Text(
+                '$_matchPercentage%',
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
+                  color: labelColor,
                 ),
-                Text(
-                  'Below average',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFFFFC107),
-                  ),
-                ),
-              ],
+              ),
+              const SizedBox(width: 12),
+              StatusPill(label: label, color: labelColor),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: _matchPercentage.clamp(0, 100) / 100.0,
+              minHeight: 14,
+              backgroundColor: AppColors.background,
+              color: labelColor,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSkillsComparison() {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Text(
-              'Skills Comparison',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF6750A4),
-              ),
-            ),
+    final matched =
+        _existingSkills.isNotEmpty ? _existingSkills : _studentSkillNames;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 740;
+        final matchedCard = _buildSkillGroupCard(
+          title: 'Your Matching Skills',
+          icon: Icons.check_circle_outline_rounded,
+          skills: matched,
+          color: AppColors.success,
+          emptyText: 'No matching required skills saved yet.',
+        );
+        final missingCard = _buildSkillGroupCard(
+          title: 'Missing Skills to Learn',
+          icon: Icons.lightbulb_outline_rounded,
+          skills: _missingSkills,
+          color: AppColors.warning,
+          emptyText: 'None — you cover all listed skills for this role!',
+        );
+
+        if (isWide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: matchedCard),
+              const SizedBox(width: 20),
+              Expanded(child: missingCard),
+            ],
+          );
+        }
+
+        return Column(
+          children: [
+            matchedCard,
             const SizedBox(height: 16),
-            _buildSkillColumn(
-              title: 'Your Skills',
-              skills: ['Python', 'JavaScript', 'SQL', 'Git'],
-              color: Color(0xFF6750A4),
-            ),
-            const SizedBox(width: 16),
-            _buildSkillColumn(
-              title: 'Required Skills',
-              skills: ['Python', 'Machine Learning', 'TensorFlow', 'Deep Learning', 'Data Visualization'],
-              color: Color(0xFFFFC107),
-            ),
+            missingCard,
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildSkillColumn({
+  Widget _buildSkillGroupCard({
     required String title,
+    required IconData icon,
     required List<String> skills,
     required Color color,
+    required String emptyText,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          title,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 4.0,
-          runSpacing: 4.0,
-          children: skills.map(
-            (skill) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                skill,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: color,
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
+              StatusPill(label: '${skills.length}', color: color),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (skills.isEmpty)
+            Text(
+              emptyText,
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: AppColors.textSecondary,
+              ),
+            )
+          else
+            Wrap(
+              spacing: 8.0,
+              runSpacing: 8.0,
+              children: skills
+                  .map((skill) => StatusPill(label: skill, color: color))
+                  .toList(),
             ),
-          ).toList(),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildAiInterpretation() {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            const Text(
-              'AI Interpretation',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF6750A4),
-              ),
+    return AppCard(
+      backgroundColor: AppColors.primaryLight.withValues(alpha: 0.45),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
             ),
-            const SizedBox(height: 12),
-            const Text(
-              'Based on your current skills and the requirements for your selected career, you have a 58% skill match. The main areas needing improvement are machine learning algorithms, deep learning frameworks, and data visualization techniques. Focus on building practical projects to strengthen these areas.',
-              style: TextStyle(
-                fontSize: 14,
-                color: const Color(0xFF616161),
-                height: 1.5,
-              ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: AppColors.primary,
+              size: 22,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AI Coach Interpretation',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _aiInterpretation.isNotEmpty
+                      ? _aiInterpretation
+                      : 'Focus on building practical projects in your missing skills.',
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    color: AppColors.textPrimary,
+                    height: 1.55,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildGenerateRoadmapButton() {
-    return ElevatedButton(
-      onPressed: () {
-        // TODO: Generate learning roadmap
-      },
-      style: ElevatedButton.styleFrom(
-        foregroundColor: Colors.white,
-        backgroundColor: const Color(0xFF6750A4),
-        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-      ),
-      child: const Text('Generate Learning Roadmap'),
+  Widget _buildActionRow() {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        ElevatedButton.icon(
+          onPressed: _isGeneratingRoadmap ? null : _generateRoadmap,
+          icon: const Icon(Icons.route_rounded, size: 18),
+          label: Text(_isGeneratingRoadmap
+              ? 'Generating Roadmap...'
+              : 'Generate Learning Roadmap'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => context.go(
+            '/personalized-skills',
+            extra: {
+              'targetCareer': _targetCareer,
+              'existingSkills': _studentSkillNames,
+              'missingSkills': _missingSkills,
+              'learningGoals': _learningGoals,
+            },
+          ),
+          icon: const Icon(Icons.tips_and_updates_outlined, size: 18),
+          label: const Text('View Skill Suggestions'),
+        ),
+      ],
     );
   }
 }

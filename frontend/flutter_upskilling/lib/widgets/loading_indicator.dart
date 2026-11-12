@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:upskilling/widgets/app_theme.dart';
 
 class LoadingIndicator extends StatelessWidget {
   final String? message;
   final double? size;
 
-  LoadingIndicator({
+  const LoadingIndicator({
     Key? key,
     this.message,
     this.size,
@@ -13,22 +14,34 @@ class LoadingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            color: Color(0xFF6750A4),
-          ),
-          const SizedBox(height: 16),
-          if (message != null)
-            Text(
-              message!,
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: size ?? 40,
+              height: size ?? 40,
+              child: const CircularProgressIndicator(
+                strokeWidth: 3.2,
+                color: AppColors.primary,
               ),
             ),
-        ],
+            if (message != null) ...[
+              const SizedBox(height: 18),
+              Text(
+                message!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -38,7 +51,7 @@ class ErrorMessage extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
 
-  ErrorMessage({
+  const ErrorMessage({
     Key? key,
     required this.message,
     this.onRetry,
@@ -47,34 +60,58 @@ class ErrorMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.red,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[700],
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: AppCard(
+            padding: const EdgeInsets.all(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.error_outline_rounded,
+                    size: 40,
+                    color: AppColors.danger,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Something went wrong',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                if (onRetry != null) ...[
+                  const SizedBox(height: 22),
+                  ElevatedButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Try Again'),
+                  ),
+                ],
+              ],
             ),
-            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
-          if (onRetry != null)
-            ElevatedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFF6750A4),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

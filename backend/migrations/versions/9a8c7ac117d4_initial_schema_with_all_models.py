@@ -14,7 +14,6 @@ Create Date: 2026-11-10 08:29:38.422903
 
 from alembic import op
 import sqlalchemy as sa
-import sqlalchemy_utils
 
 
 # revision identifiers, used by Alembic.
@@ -111,11 +110,12 @@ def upgrade() -> None:
         sa.Column('career_id', sa.Integer(), nullable=True),
         sa.Column('match_score', sa.Integer(), nullable=True),
         sa.Column('reason', sa.Text(), nullable=True),
-        sa.Column('matching_skills', Column(JSON, nullable=True, default=list)),
-        sa.Column('missing_skills', Column(JSON, nullable=True, default=list)),
+        sa.Column('matching_skills', sa.JSON(), nullable=True),
+        sa.Column('missing_skills', sa.JSON(), nullable=True),
         sa.Column('ai_provider', sa.String(), nullable=True),
         sa.Column('ai_model', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['career_id'], ['careers.id'], ondelete='SET NULL'),
     )
@@ -127,13 +127,14 @@ def upgrade() -> None:
         sa.Column('user_id', sa.Integer(), nullable=False),
         sa.Column('career_id', sa.Integer(), nullable=True),
         sa.Column('match_percentage', sa.Integer(), nullable=True),
-        sa.Column('existing_skills', Column(JSON, nullable=True, default=list)),
-        sa.Column('required_skills', Column(JSON, nullable=True, default=list)),
-        sa.Column('missing_skills', Column(JSON, nullable=True, default=list)),
-        sa.Column('identified_skills', Column(JSON, nullable=True, default=list)),
+        sa.Column('existing_skills', sa.JSON(), nullable=True),
+        sa.Column('required_skills', sa.JSON(), nullable=True),
+        sa.Column('missing_skills', sa.JSON(), nullable=True),
+        sa.Column('identified_skills', sa.JSON(), nullable=True),
         sa.Column('ai_provider', sa.String(), nullable=True),
         sa.Column('ai_model', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['career_id'], ['careers.id'], ondelete='SET NULL'),
     )
@@ -148,9 +149,10 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('ai_provider', sa.String(), nullable=True),
         sa.Column('ai_model', sa.String(), nullable=True),
-        sa.Column('version', sa.String(), nullable=True, server_default=sa.text('"1.0"')),
+        sa.Column('version', sa.String(), nullable=True, server_default=sa.text("'1.0'")),
         sa.Column('created_at', sa.DateTime(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['career_id'], ['careers.id'], ondelete='SET NULL'),
     )
@@ -165,6 +167,7 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('json_data', sa.JSON(), nullable=False),
         sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
     )
     
     # roadmap_phases table
@@ -175,7 +178,9 @@ def upgrade() -> None:
         sa.Column('phase_name', sa.String(), nullable=False),
         sa.Column('phase_order', sa.Integer(), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('estimated_duration', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['roadmap_id'], ['learning_roadmaps.id'], ondelete='CASCADE'),
     )
     
@@ -191,6 +196,7 @@ def upgrade() -> None:
         sa.Column('order_index', sa.Integer(), nullable=False),
         sa.Column('completion_criteria', sa.Text(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['phase_id'], ['roadmap_phases.id'], ondelete='CASCADE'),
     )
     
@@ -208,6 +214,7 @@ def upgrade() -> None:
         sa.Column('is_verified', sa.Boolean(), nullable=False, server_default=sa.text('false')),
         sa.Column('ai_provider', sa.String(), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
     )
     
     # task_progress table
@@ -219,6 +226,7 @@ def upgrade() -> None:
         sa.Column('status', sa.String(), nullable=False),
         sa.Column('completed_at', sa.DateTime(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['task_id'], ['roadmap_tasks.id'], ondelete='CASCADE'),
     )

@@ -58,6 +58,20 @@ class AIService:
             print(f"AI provider initialization warning: {e}")
             self.provider = None
     
+    @property
+    def is_configured(self) -> bool:
+        """Return True only when the configured AI provider has usable credentials."""
+        self._initialize_provider()
+        if not self.provider:
+            return False
+        if self._provider_type == "gemini" and not settings.AI_API_KEY:
+            return False
+        if self._provider_type == "compatible" and (not settings.AI_BASE_URL or not settings.AI_MODEL):
+            return False
+        if self._provider_type == "ollama" and not settings.AI_MODEL:
+            return False
+        return True
+
     async def generate(self, prompt: str, response_model: Optional[type] = None) -> Any:
         """Generate a response using the configured AI provider.
         
@@ -68,11 +82,8 @@ class AIService:
         Returns:
             AI response, either as a string or validated model instance
         """
-        if not self.provider:
-            self._initialize_provider()
-        
-        if not self.provider:
-            # Return a structured demo response when no AI is available
+        if not self.is_configured:
+            # Return a structured demo response when no AI key/provider is configured
             return self._get_demo_response(prompt)
         
         try:
@@ -117,15 +128,57 @@ class AIService:
         elif "roadmap" in prompt_lower:
             return {
                 "demo_mode": True,
-                "phases": [
+                "roadmap": {
+                    "title": "Personalized Learning Roadmap",
+                    "phases": [
+                        {
+                            "phase_name": "Phase 1: Fundamentals",
+                            "phase_order": 1,
+                            "description": "Learn programming and core computer science fundamentals",
+                            "estimated_duration": "4 weeks",
+                            "tasks": [
+                                {
+                                    "task_name": "Core Syntax & Data Structures",
+                                    "description": "Practice arrays, hash maps, trees, and problem solving",
+                                    "skill_focus": "Data Structures",
+                                    "estimated_duration": "2 weeks",
+                                    "completion_criteria": "Solve 20 core coding exercises",
+                                },
+                                {
+                                    "task_name": "Version Control with Git",
+                                    "description": "Master branching, merging, and collaborative workflows",
+                                    "skill_focus": "Git",
+                                    "estimated_duration": "2 weeks",
+                                    "completion_criteria": "Push a structured project repository",
+                                },
+                            ],
+                        }
+                    ],
+                },
+                "message": "Demo mode: AI provider not configured. Showing sample roadmap.",
+            }
+        elif "resource" in prompt_lower:
+            return {
+                "demo_mode": True,
+                "resources": [
                     {
-                        "phase_name": "Phase 1: Fundamentals",
-                        "phase_order": 1,
-                        "description": "Learn programming fundamentals",
-                        "estimated_duration": "4 weeks"
-                    }
+                        "resource_name": "freeCodeCamp Full Curriculum",
+                        "platform": "freeCodeCamp",
+                        "description": "Interactive tutorials and hands-on projects",
+                        "resource_type": "course",
+                        "url": "https://www.freecodecamp.org/learn",
+                        "estimated_learning_duration": "6 weeks",
+                    },
+                    {
+                        "resource_name": "Official Python Tutorial",
+                        "platform": "python.org",
+                        "description": "Comprehensive core language reference and examples",
+                        "resource_type": "article",
+                        "url": "https://docs.python.org/3/tutorial/",
+                        "estimated_learning_duration": "10 hours",
+                    },
                 ],
-                "message": "Demo mode: AI provider not configured. Showing sample roadmap."
+                "message": "Demo mode: AI provider not configured. Showing sample resources.",
             }
         elif "skill suggestion" in prompt_lower or "suggest" in prompt_lower:
             return {
@@ -134,16 +187,318 @@ class AIService:
                     {
                         "skill": "React",
                         "reason": "High demand in web development",
-                        "priority": "high"
+                        "priority": "high",
+                        "explanation": "Expands your programming stack into modern frontend UIs",
                     }
                 ],
-                "message": "Demo mode: AI provider not configured. Showing sample skill suggestions."
+                "message": "Demo mode: AI provider not configured. Showing sample skill suggestions.",
             }
         else:
             return {
                 "demo_mode": True,
-                "message": "Demo mode: AI provider not configured. Showing default response."
+                "message": "Demo mode: AI provider not configured. Showing default response.",
             }
+
+    @staticmethod
+    def _parse_json_response(response: Any) -> Optional[Dict[str, Any]]:
+        """Parse JSON string (including markdown-fenced JSON) into a dict."""
+        if isinstance(response, dict):
+            return response
+        if not isinstance(response, str):
+            return None
+        text = response.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip().startswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        try:
+            parsed = json.loads(text)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            # Extract embedded JSON object if surrounded by explanatory text or fences
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                try:
+                    parsed = json.loads(text[start : end + 1])
+                    return parsed if isinstance(parsed, dict) else None
+                except json.JSONDecodeError:
+                    return None
+            return None
+
+    @staticmethod
+    def _coerce_text(value: Any) -> str:
+        """Convert LLM fields cleanly into a readable string."""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, list):
+            parts = [str(v).strip() for v in value if str(v).strip()]
+            return "; ".join(parts)
+        if isinstance(value, dict):
+            for key in ("summary", "overview", "text", "interpretation"):
+                if key in value and isinstance(value[key], str):
+                    return value[key].strip()
+            parts = [f"{k}: {v}" for k, v in value.items()]
+            return " | ".join(parts)
+        return str(value).strip()
+
+    def _build_dynamic_demo_careers(
+        self,
+        skills: List[str],
+        interests: str = "",
+    ) -> Dict[str, Any]:
+        """Compute skill-aware career recommendations when running in demo mode."""
+        student_norm = {s.strip().lower(): s.strip() for s in skills if s.strip()}
+        interest_lower = interests.lower()
+
+        catalog = [
+            {
+                "career": "Software Engineer",
+                "description": "Build and maintain scalable software applications, APIs, and distributed systems.",
+                "required": ["Python", "JavaScript", "Data Structures", "SQL", "Git", "System Design", "DevOps"],
+                "keywords": ["software", "web", "backend", "frontend", "app", "system", "code"],
+            },
+            {
+                "career": "Data Scientist",
+                "description": "Analyze complex datasets, build predictive statistical models, and communicate insights.",
+                "required": ["Python", "SQL", "Statistics", "Data Analysis", "Machine Learning", "Data Visualization"],
+                "keywords": ["data", "analytics", "statistics", "science", "bi"],
+            },
+            {
+                "career": "Machine Learning Engineer",
+                "description": "Design, train, optimize, and deploy production ML and deep learning pipelines.",
+                "required": ["Python", "Machine Learning", "Deep Learning", "PyTorch", "TensorFlow", "Data Structures", "Docker"],
+                "keywords": ["ai", "ml", "machine learning", "deep learning", "llm", "neural"],
+            },
+            {
+                "career": "Full-Stack Web Developer",
+                "description": "Create responsive frontend applications and robust REST/GraphQL backend services.",
+                "required": ["JavaScript", "TypeScript", "React", "HTML/CSS", "Python", "SQL", "Git"],
+                "keywords": ["web", "frontend", "backend", "react", "flutter", "ui"],
+            },
+        ]
+
+        recommendations = []
+        for entry in catalog:
+            matching = []
+            missing = []
+            for req in entry["required"]:
+                if req.lower() in student_norm:
+                    matching.append(req)
+                else:
+                    missing.append(req)
+
+            base_score = int(len(matching) / len(entry["required"]) * 80) + 15
+            if any(kw in interest_lower for kw in entry["keywords"]):
+                base_score = min(98, base_score + 10)
+            match_score = max(35, min(98, base_score))
+
+            if matching:
+                reason = f"Matches your existing skills ({', '.join(matching)}) and fits this career track."
+            else:
+                reason = "Strong growth path; starting with foundational skills will build momentum quickly."
+
+            recommendations.append({
+                "career": entry["career"],
+                "description": entry["description"],
+                "match_score": match_score,
+                "reason": reason,
+                "matching_skills": matching,
+                "missing_skills": missing,
+                "required_skills": entry["required"],
+            })
+
+        recommendations.sort(key=lambda r: r["match_score"], reverse=True)
+        return {
+            "demo_mode": True,
+            "recommendations": recommendations,
+            "message": "Demo mode: Showing skill-matched career recommendations.",
+        }
+
+    def _build_dynamic_demo_suggestions(
+        self,
+        existing_skills: List[str],
+        target_career: str,
+        missing_skills: List[str],
+    ) -> Dict[str, Any]:
+        """Build personalized skill suggestions from missing skills in demo mode."""
+        candidates = [s for s in missing_skills if s.strip()]
+        if not candidates:
+            candidates = ["System Design", "Machine Learning", "Docker", "Testing & CI/CD"]
+
+        existing_str = ", ".join(existing_skills) if existing_skills else "your current foundation"
+        career_label = target_career or "your target career"
+
+        suggestions = []
+        for idx, skill in enumerate(candidates[:5]):
+            priority = "high" if idx < 2 else ("medium" if idx < 4 else "low")
+            suggestions.append({
+                "skill": skill,
+                "reason": f"Core competency needed for {career_label}.",
+                "priority": priority,
+                "explanation": f"Builds on {existing_str} and closes a key gap for {career_label}.",
+            })
+
+        return {
+            "demo_mode": True,
+            "suggestions": suggestions,
+            "message": "Demo mode: Showing suggestions based on your skill gaps.",
+        }
+
+    def _build_dynamic_demo_roadmap(
+        self,
+        student_skills: List[Dict[str, str]],
+        career_requirements: List[Dict[str, str]],
+    ) -> Dict[str, Any]:
+        """Build a multi-phase learning roadmap tailored to missing skills in demo mode."""
+        have = {s.get("skill_name", "").strip().lower() for s in student_skills if s.get("skill_name")}
+        req_names = [r.get("skill_name", "").strip() for r in career_requirements if r.get("skill_name")]
+        missing = [r for r in req_names if r.lower() not in have]
+
+        focus_skills = missing if missing else (req_names[:4] if req_names else ["Python", "Data Structures", "System Design", "Capstone Project"])
+
+        phases = []
+        chunk_size = max(1, (len(focus_skills) + 2) // 3)
+        phase_titles = [
+            ("Phase 1: Core Foundations", "3 weeks", "Build solid fundamentals in your highest-priority gap skills."),
+            ("Phase 2: Applied Tools & Frameworks", "4 weeks", "Apply intermediate concepts through guided exercises."),
+            ("Phase 3: Integration & Portfolio Project", "4 weeks", "Combine skills into an end-to-end portfolio project."),
+        ]
+
+        for p_idx, (title, duration, desc) in enumerate(phase_titles):
+            start = p_idx * chunk_size
+            slice_skills = focus_skills[start : start + chunk_size]
+            if not slice_skills and p_idx == 2:
+                slice_skills = ["Capstone Portfolio Project"]
+            if not slice_skills:
+                continue
+
+            tasks = []
+            for skill in slice_skills:
+                tasks.append({
+                    "task_name": f"Learn & Practice {skill}",
+                    "description": f"Study core concepts of {skill} and build a mini-project or coding exercise.",
+                    "skill_focus": skill,
+                    "estimated_duration": "1-2 weeks",
+                    "completion_criteria": f"Complete a hands-on exercise demonstrating {skill}.",
+                })
+
+            phases.append({
+                "phase_name": title,
+                "phase_order": len(phases) + 1,
+                "description": desc,
+                "estimated_duration": duration,
+                "tasks": tasks,
+            })
+
+        return {
+            "demo_mode": True,
+            "roadmap": {
+                "title": "Personalized Upskilling Roadmap",
+                "phases": phases,
+            },
+            "message": "Demo mode: Generated roadmap from your missing skills.",
+        }
+
+    def _build_dynamic_demo_resources(
+        self,
+        task_description: str,
+        skill_focus: str,
+        resource_type: str = "mixed",
+    ) -> Dict[str, Any]:
+        """Return verified educational resources matched to skill focus in demo mode."""
+        topic = (skill_focus or task_description or "Programming").strip()
+        topic_lower = topic.lower()
+
+        resources = []
+        if "python" in topic_lower:
+            resources.append({
+                "resource_name": "Official Python Tutorial",
+                "platform": "python.org",
+                "description": "Official language guide covering syntax, data structures, and standard library.",
+                "resource_type": "Article",
+                "url": "https://docs.python.org/3/tutorial/",
+                "estimated_learning_duration": "10 hours",
+            })
+        if "machine learning" in topic_lower or "ml" in topic_lower or "scikit" in topic_lower:
+            resources.append({
+                "resource_name": "Machine Learning Crash Course",
+                "platform": "Google Developers",
+                "description": "Interactive guide to supervised learning, loss, and model evaluation.",
+                "resource_type": "Course",
+                "url": "https://developers.google.com/machine-learning/crash-course",
+                "estimated_learning_duration": "15 hours",
+            })
+        if "deep learning" in topic_lower or "pytorch" in topic_lower or "tensorflow" in topic_lower:
+            resources.append({
+                "resource_name": "PyTorch Tutorials",
+                "platform": "pytorch.org",
+                "description": "Official hands-on tutorials for tensors, autograd, and neural networks.",
+                "resource_type": "Tutorial",
+                "url": "https://pytorch.org/tutorials/",
+                "estimated_learning_duration": "3 weeks",
+            })
+        if "sql" in topic_lower or "database" in topic_lower:
+            resources.append({
+                "resource_name": "SQLBolt Interactive Lessons",
+                "platform": "SQLBolt",
+                "description": "Interactive SQL queries, joins, and aggregations in the browser.",
+                "resource_type": "Tutorial",
+                "url": "https://sqlbolt.com/",
+                "estimated_learning_duration": "6 hours",
+            })
+
+        resources.extend([
+            {
+                "resource_name": f"{topic} Interactive Track",
+                "platform": "freeCodeCamp",
+                "description": f"Structured curriculum and project-based practice for {topic}.",
+                "resource_type": "Course",
+                "url": "https://www.freecodecamp.org/learn",
+                "estimated_learning_duration": "4 weeks",
+            },
+            {
+                "resource_name": f"{topic} Reference & Guides",
+                "platform": "MDN / Official Docs",
+                "description": f"Core concepts, guides, and best practices related to {topic}.",
+                "resource_type": "Article",
+                "url": "https://developer.mozilla.org/",
+                "estimated_learning_duration": "5 hours",
+            },
+            {
+                "resource_name": f"{topic} Video Lecture Series (MIT OCW / freeCodeCamp)",
+                "platform": "MIT OpenCourseWare",
+                "description": f"Recorded university lectures and guided walkthroughs covering {topic}.",
+                "resource_type": "Video",
+                "url": "https://ocw.mit.edu/",
+                "estimated_learning_duration": "6 weeks",
+            },
+            {
+                "resource_name": f"{topic} Companion Handbook & Open Textbooks",
+                "platform": "Open Textbook Library / Git-SCM",
+                "description": f"Comprehensive reading material and exercises to build depth in {topic}.",
+                "resource_type": "Book",
+                "url": "https://open.umn.edu/opentextbooks",
+                "estimated_learning_duration": "4 weeks",
+            },
+        ])
+
+        pref = (resource_type or "mixed").strip().lower()
+        if pref and pref != "mixed":
+            filtered = [r for r in resources if pref in r.get("resource_type", "").lower()]
+            if filtered:
+                resources = filtered
+
+        return {
+            "demo_mode": True,
+            "resources": resources,
+            "message": "Demo mode: Showing curated resources for your topic.",
+        }
     
     async def get_career_recommendations(
         self, 
@@ -171,16 +526,13 @@ class AIService:
         
         # Ensure we have a valid structure
         if isinstance(response, dict) and response.get("demo_mode"):
-            return response
+            return self._build_dynamic_demo_careers(skills, interests)
         
-        # Normalize the response
-        if isinstance(response, str):
-            try:
-                response = json.loads(response)
-            except json.JSONDecodeError:
-                return self._get_demo_response(prompt)
-        
-        return response or self._get_demo_response(prompt)
+        parsed = self._parse_json_response(response)
+        if parsed and isinstance(parsed.get("recommendations") or parsed.get("careers"), list):
+            parsed.setdefault("demo_mode", False)
+            return parsed
+        return self._build_dynamic_demo_careers(skills, interests)
     
     def _build_career_recommendation_prompt(
         self, 
@@ -257,13 +609,30 @@ Format the response as a JSON object with a "recommendations" array.
         }
         
         if isinstance(response, dict) and response.get("demo_mode"):
-            # Add AI interpretation even in demo mode
-            result["ai_interpretation"] = response.get("message", "")
-        elif isinstance(response, dict):
-            # Add AI interpretation from actual AI
-            result["ai_interpretation"] = response.get("interpretation", "")
+            result["demo_mode"] = True
+            if missing_skills:
+                result["ai_interpretation"] = (
+                    f"You match {match_percentage}% of the target skills. "
+                    f"Prioritize learning {', '.join(missing_skills[:3])} next through hands-on projects."
+                )
+            else:
+                result["ai_interpretation"] = (
+                    "Great job! You already have all listed required skills for this role. "
+                    "Focus on building portfolio projects and deepening proficiency."
+                )
         else:
-            result["ai_interpretation"] = self._extract_ai_interpretation(response)
+            parsed = self._parse_json_response(response)
+            interp = ""
+            if parsed:
+                interp = self._coerce_text(parsed.get("interpretation"))
+                if not interp and parsed.get("suggestions"):
+                    interp = self._coerce_text(parsed.get("suggestions"))
+            if not interp and isinstance(response, str):
+                interp = response.strip()
+            result["demo_mode"] = False if parsed else True
+            result["ai_interpretation"] = interp or (
+                f"You match {match_percentage}% of the target skills."
+            )
         
         return result
     
@@ -291,7 +660,9 @@ Provide:
 - Personalized suggestions for which missing skills to prioritize first
 - The importance of each missing skill (critical, important, nice-to-have)
 
-Format the response as a JSON object with "interpretation" and "suggestions" fields.
+Format the response as a JSON object with:
+- "interpretation": a concise 2-3 sentence plain-text string summarizing career readiness and priorities
+- "suggestions": array of prioritized missing skills with importance (critical, important, nice-to-have)
 """
     
     def _extract_ai_interpretation(self, response: str) -> str:
@@ -327,15 +698,13 @@ Format the response as a JSON object with "interpretation" and "suggestions" fie
         response = await self.generate(prompt)
         
         if isinstance(response, dict) and response.get("demo_mode"):
-            return response
+            return self._build_dynamic_demo_suggestions(existing_skills, target_career, missing_skills)
         
-        if isinstance(response, str):
-            try:
-                response = json.loads(response)
-            except json.JSONDecodeError:
-                return self._get_demo_response(prompt)
-        
-        return response or self._get_demo_response(prompt)
+        parsed = self._parse_json_response(response)
+        if parsed and isinstance(parsed.get("suggestions"), list) and parsed["suggestions"]:
+            parsed.setdefault("demo_mode", False)
+            return parsed
+        return self._build_dynamic_demo_suggestions(existing_skills, target_career, missing_skills)
     
     def _build_personalized_skills_prompt(
         self,
@@ -389,15 +758,18 @@ Format the response as a JSON object with a "suggestions" array.
         response = await self.generate(prompt)
         
         if isinstance(response, dict) and response.get("demo_mode"):
-            return response
+            return self._build_dynamic_demo_roadmap(student_skills, career_requirements)
         
-        if isinstance(response, str):
-            try:
-                response = json.loads(response)
-            except json.JSONDecodeError:
-                return self._get_demo_response(prompt)
-        
-        return response or self._get_demo_response(prompt)
+        parsed = self._parse_json_response(response)
+        phases = (
+            parsed.get("roadmap", {}).get("phases")
+            if isinstance(parsed, dict) and isinstance(parsed.get("roadmap"), dict)
+            else (parsed.get("phases") if isinstance(parsed, dict) else None)
+        )
+        if parsed and isinstance(phases, list) and phases:
+            parsed.setdefault("demo_mode", False)
+            return parsed
+        return self._build_dynamic_demo_roadmap(student_skills, career_requirements)
     
     def _build_roadmap_prompt(
         self,
@@ -416,20 +788,18 @@ Student's interests: {interests}
 Academic background: {academic_background}
 Learning goals: {learning_goals}
 
-Create a structured learning roadmap with 4-6 phases. Each phase should have:
+Create a structured learning roadmap with 3-5 phases. Each phase should have:
 - phase_name: name of the phase
 - phase_order: sequential order number
 - description: what this phase covers
 - estimated_duration: e.g., "4 weeks", "6 weeks"
-- tasks: list of tasks with task_name, description, skill_focus, estimated_duration
+- tasks: list of 2-3 tasks per phase, each with task_name, description, skill_focus, estimated_duration, and completion_criteria
 - learning_objectives: what the student should achieve
 - practical_exercises: hands-on activities or projects
 - learning_resources: recommended resources (name, platform, type, url estimate)
 - completion_criteria: how the student knows they've completed this phase
 
-Format the response as a JSON object with a "roadmap" containing "phases" array.
-Each phase should contain "tasks" array, "learning_objectives", "estimated_duration",
-"practical_exercises", "learning_resources", and "completion_criteria".
+Format the response as a JSON object with a "roadmap" object containing "title" and "phases" array.
 """
     
     async def recommend_learning_resources(
@@ -455,15 +825,13 @@ Each phase should contain "tasks" array, "learning_objectives", "estimated_durat
         response = await self.generate(prompt)
         
         if isinstance(response, dict) and response.get("demo_mode"):
-            return response
+            return self._build_dynamic_demo_resources(task_description, skill_focus, resource_type)
         
-        if isinstance(response, str):
-            try:
-                response = json.loads(response)
-            except json.JSONDecodeError:
-                return self._get_demo_response(prompt)
-        
-        return response or self._get_demo_response(prompt)
+        parsed = self._parse_json_response(response)
+        if parsed and isinstance(parsed.get("resources"), list) and parsed["resources"]:
+            parsed.setdefault("demo_mode", False)
+            return parsed
+        return self._build_dynamic_demo_resources(task_description, skill_focus, resource_type)
     
     def _build_resource_recommendation_prompt(
         self,
