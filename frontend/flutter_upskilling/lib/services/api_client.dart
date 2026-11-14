@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,11 +8,13 @@ class APIClient {
   // Base URL for the FastAPI backend
   // Platform-specific configuration:
   //   Android emulator: -DFLUTTER_API_BASE_URL=http://10.0.2.2:8000
-  //   iOS simulator:    -DFLUTTER_API_BASE_URL=http://127.0.0.1:8000
-  //   macOS desktop:    -DFLUTTER_API_BASE_URL=http://127.0.0.1:8000
-  //   Physical device:  set via CI/CD or run flags
-  //   Override with: export FLUTTER_API_BASE_URL=<your-host>:8000
-  static const String _baseUrl = String.fromEnvironment('FLUTTER_API_BASE_URL', defaultValue: 'http://10.0.2.2:8000');
+  //   Web / Desktop:    http://127.0.0.1:8000 (default when running on Web)
+  //   Physical device:  set via --dart-define=FLUTTER_API_BASE_URL=http://<host>:8000
+  static String get _baseUrl {
+    const configured = String.fromEnvironment('FLUTTER_API_BASE_URL');
+    if (configured.isNotEmpty) return configured;
+    return kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000';
+  }
 
   // JWT token storage key
   static const String _tokenKey = 'jwt_token';
@@ -85,14 +88,24 @@ class APIClient {
     return _handleResponse(response);
   }
 
-  static Future<Map<String, dynamic>> updateProfile({required String name, required String institution, required String degree, required String academicYear}) async {
+  static Future<Map<String, dynamic>> updateProfile({
+    required String name,
+    required String institution,
+    required String degree,
+    required String academicYear,
+    String? interests,
+    String? learningGoals,
+  }) async {
     final uri = Uri.parse('$_baseUrl/api/profile');
-    final body = json.encode({
+    final Map<String, dynamic> payload = {
       'name': name,
       'institution': institution,
       'degree': degree,
       'academic_year': academicYear,
-    });
+    };
+    if (interests != null) payload['interests'] = interests;
+    if (learningGoals != null) payload['learning_goals'] = learningGoals;
+    final body = json.encode(payload);
 
     final response = await http.post(
       uri,
@@ -117,17 +130,32 @@ class APIClient {
     return result['data']['skills'] ?? [];
   }
 
-  static Future<Map<String, dynamic>> addSkill({required String skillName, required String proficiencyLevel}) async {
+  static Future<Map<String, dynamic>> addSkill({
+    required String skillName,
+    required String proficiencyLevel,
+    String category = '',
+  }) async {
     final uri = Uri.parse('$_baseUrl/api/skills');
     final body = json.encode({
       'skill_name': skillName,
       'proficiency_level': proficiencyLevel,
+      'category': category,
     });
 
     final response = await http.post(
       uri,
       headers: await buildHeaders(),
       body: body,
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> deleteSkill(int skillId) async {
+    final uri = Uri.parse('$_baseUrl/api/skills/$skillId');
+    final response = await http.delete(
+      uri,
+      headers: await buildHeaders(),
     );
 
     return _handleResponse(response);
@@ -208,11 +236,16 @@ class APIClient {
 
   // --- Learning resources ---
 
-  static Future<List<dynamic>> getLearningResources({required String taskDescription, required String skillFocus}) async {
+  static Future<List<dynamic>> getLearningResources({
+    required String taskDescription,
+    required String skillFocus,
+    String resourceType = 'mixed',
+  }) async {
     final uri = Uri.parse('$_baseUrl/api/ai/recommend-resources');
     final body = json.encode({
       'task_description': taskDescription,
       'skill_focus': skillFocus,
+      'resource_type': resourceType,
     });
 
     final response = await http.post(
@@ -223,6 +256,48 @@ class APIClient {
 
     final result = _handleResponse(response);
     return result['data']['resources'] ?? [];
+  }
+
+  // --- Saved roadmap & progress ---
+
+  static Future<Map<String, dynamic>> getRoadmap() async {
+    final uri = Uri.parse('$_baseUrl/api/roadmap');
+    final response = await http.get(
+      uri,
+      headers: await buildHeaders(),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> getProgress() async {
+    final uri = Uri.parse('$_baseUrl/api/progress');
+    final response = await http.get(
+      uri,
+      headers: await buildHeaders(),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> getDemoMode() async {
+    final uri = Uri.parse('$_baseUrl/api/demo-mode');
+    final response = await http.get(
+      uri,
+      headers: await buildHeaders(),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> getHealth() async {
+    final uri = Uri.parse('$_baseUrl/health');
+    final response = await http.get(
+      uri,
+      headers: await buildHeaders(),
+    );
+
+    return _handleResponse(response);
   }
 
   // --- Task progress ---

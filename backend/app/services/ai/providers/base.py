@@ -31,48 +31,67 @@ class GeminiProvider(AIProvider):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         import google.generativeai as genai
-        self.api_key = config.get("api_key", "")
-        self.model_name = config.get("model", "gemini-pro")
+        self.api_key = (config.get("api_key") or "").strip()
+        self.model_name = (config.get("model") or "").strip() or "gemini-3-flash-preview"
+        self.genai = genai
         
         if self.api_key:
-            genai.configure(api_key=self.api_key)
+            genai.configure(api_key=self.api_key, transport="rest")
             self.model = genai.GenerativeModel(self.model_name)
         else:
             self.model = None
-            self.genai = genai
 
     async def generate(self, prompt: str, response_model: Optional[type] = None) -> Any:
         """Generate text using Gemini API."""
         if not self.api_key:
             raise AIProviderError("Gemini API key not configured")
 
-        try:
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.model.generate_content(
-                    prompt,
-                    generation_config={
-                        "temperature": self.temperature,
-                        "max_output_tokens": 8192,
-                    }
+        candidates = []
+        for m in [
+            self.model_name,
+            "gemini-3-flash-preview",
+            "gemini-3.6-flash",
+            "gemini-3.1-flash-lite",
+        ]:
+            if m and m not in candidates:
+                candidates.append(m)
+
+        req_timeout = min(int(self.timeout), 30) if self.timeout else 30
+        last_error: Optional[Exception] = None
+        loop = asyncio.get_event_loop()
+
+        for candidate_name in candidates:
+            try:
+                model_obj = (
+                    self.model
+                    if candidate_name == self.model_name and self.model is not None
+                    else self.genai.GenerativeModel(candidate_name)
                 )
-            )
-            
-            if response.text:
-                text = response.text.strip()
-                # Try to parse as JSON if a model is provided
-                if response_model:
-                    try:
-                        return response_model.model_validate_json(text)
-                    except Exception:
-                        pass
-                return text
-            else:
-                raise AIProviderError("Empty response from Gemini")
-                
-        except Exception as e:
-            raise AIProviderError(f"Gemini generation error: {str(e)}")
+                response = await loop.run_in_executor(
+                    None,
+                    lambda m=model_obj: m.generate_content(
+                        prompt,
+                        generation_config={
+                            "temperature": self.temperature,
+                            "max_output_tokens": 8192,
+                        },
+                        request_options={"timeout": req_timeout},
+                    ),
+                )
+
+                text = (getattr(response, "text", None) or "").strip()
+                if text:
+                    if response_model:
+                        try:
+                            return response_model.model_validate_json(text)
+                        except Exception:
+                            pass
+                    return text
+                last_error = AIProviderError(f"Empty response from {candidate_name}")
+            except Exception as e:
+                last_error = e
+
+        raise AIProviderError(f"Gemini generation error: {str(last_error)}")
 
     async def health_check(self) -> bool:
         """Check if Gemini API is available."""
@@ -84,7 +103,8 @@ class GeminiProvider(AIProvider):
                 None,
                 lambda: self.model.generate_content(
                     "Health check",
-                    generation_config={"temperature": 0, "max_output_tokens": 1}
+                    generation_config={"temperature": 0, "max_output_tokens": 1},
+                    request_options={"timeout": 10},
                 )
             )
             return True

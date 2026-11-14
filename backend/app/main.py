@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 import os
+import uvicorn
 
 from app.database.connection import SessionLocal, engine
 from app.database.models import Base
@@ -86,20 +87,30 @@ app = FastAPI(
 # CORS middleware - AFTER app creation
 # Configure allowed origins via environment variable for security
 # Format: comma-separated list, e.g., "http://localhost:3000,http://localhost:8080"
-allowed_origins_str = os.environ.get("CORS_ORIGINS", "")
+allowed_origins_str = os.environ.get("CORS_ORIGINS") or settings.CORS_ORIGINS
 if allowed_origins_str:
     allow_origins = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
 else:
     # Default to localhost for development
     allow_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+allow_origin_regex = (
+    r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    if settings.ENVIRONMENT == "development"
+    else None
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Ensure database tables exist on startup
+Base.metadata.create_all(bind=engine)
 
 # Now define Pydantic schemas and routes...
 
@@ -203,21 +214,179 @@ class RoadmapGenerateResponse(BaseModel):
 
 @app.post("/api/ai/roadmap-generate", response_model=RoadmapGenerateResponse)
 async def generate_roadmap(request: RoadmapGenerateRequest, current_user = Depends(get_current_user_dependency), db: Session = Depends(get_db)):
-    """Generate a personalized learning roadmap."""
+    """Generate and persist a personalized learning roadmap."""
+    from app.database.models import LearningRoadmap, RoadmapPhase, RoadmapTask, TaskProgress
+
     try:
-        roadmap = await ai_service.generate_learning_roadmap(
+        generated = await ai_service.generate_learning_roadmap(
             student_skills=request.student_skills,
             career_requirements=request.career_requirements,
             interests=request.interests,
             academic_background=request.academic_background,
             learning_goals=request.learning_goals,
         )
-        return {"success": True, "data": roadmap}
+
+        roadmap_payload = generated.get("roadmap") if isinstance(generated, dict) and isinstance(generated.get("roadmap"), dict) else generated
+        phases_data = roadmap_payload.get("phases", []) if isinstance(roadmap_payload, dict) else []
+        title = str((roadmap_payload.get("title") if isinstance(roadmap_payload, dict) else None) or "Personalized Learning Roadmap")
+
+        roadmap_record = LearningRoadmap(
+            user_id=current_user.id,
+            title=title,
+            description=str(request.learning_goals or "AI-generated upskilling roadmap"),
+            ai_provider=settings.AI_PROVIDER,
+            ai_model=settings.AI_MODEL or None,
+        )
+        db.add(roadmap_record)
+        db.flush()
+
+        def _as_text(val, default=""):
+            if val is None:
+                return default
+            if isinstance(val, list):
+                joined = "; ".join(str(x).strip() for x in val if str(x).strip())
+                return joined or default
+            if isinstance(val, dict):
+                return ", ".join(f"{k}: {v}" for k, v in val.items()) or default
+            s = str(val).strip()
+            return s or default
+
+        saved_phases = []
+        for p_idx, phase in enumerate(phases_data, start=1):
+            phase_record = RoadmapPhase(
+                roadmap_id=roadmap_record.id,
+                phase_name=_as_text(phase.get("phase_name"), f"Phase {p_idx}"),
+                phase_order=int(phase.get("phase_order", p_idx) or p_idx),
+                description=_as_text(phase.get("description"), ""),
+                estimated_duration=_as_text(phase.get("estimated_duration"), ""),
+            )
+            db.add(phase_record)
+            db.flush()
+
+            tasks_data = phase.get("tasks") or []
+            if not tasks_data:
+                tasks_data = [
+                    {
+                        "task_name": f"Complete {phase_record.phase_name}",
+                        "description": phase_record.description or "Study core topics in this phase",
+                        "skill_focus": phase_record.phase_name,
+                        "estimated_duration": phase_record.estimated_duration or "2 weeks",
+                        "completion_criteria": "Complete phase exercises",
+                    }
+                ]
+
+            saved_tasks = []
+            for t_idx, task in enumerate(tasks_data, start=1):
+                task_record = RoadmapTask(
+                    phase_id=phase_record.id,
+                    task_name=_as_text(task.get("task_name"), f"Task {t_idx}"),
+                    task_description=_as_text(task.get("description") or task.get("task_description"), ""),
+                    skill_focus=_as_text(task.get("skill_focus"), ""),
+                    estimated_duration=_as_text(task.get("estimated_duration"), ""),
+                    order_index=t_idx,
+                    completion_criteria=_as_text(task.get("completion_criteria"), ""),
+                )
+                db.add(task_record)
+                db.flush()
+
+                progress_record = TaskProgress(
+                    user_id=current_user.id,
+                    task_id=task_record.id,
+                    status="not_started",
+                )
+                db.add(progress_record)
+                saved_tasks.append({
+                    "id": task_record.id,
+                    "task_name": task_record.task_name,
+                    "task_description": task_record.task_description,
+                    "skill_focus": task_record.skill_focus,
+                    "estimated_duration": task_record.estimated_duration,
+                    "completion_criteria": task_record.completion_criteria,
+                    "status": "not_started",
+                })
+
+            saved_phases.append({
+                "id": phase_record.id,
+                "phase_name": phase_record.phase_name,
+                "phase_order": phase_record.phase_order,
+                "description": phase_record.description,
+                "estimated_duration": phase_record.estimated_duration,
+                "tasks": saved_tasks,
+            })
+
+        db.commit()
+        return {
+            "success": True,
+            "data": {
+                "demo_mode": bool(generated.get("demo_mode")) if isinstance(generated, dict) else False,
+                "roadmap": {
+                    "id": roadmap_record.id,
+                    "title": roadmap_record.title,
+                    "description": roadmap_record.description,
+                    "phases": saved_phases,
+                },
+            },
+        }
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate learning roadmap: {str(e)}",
         )
+
+
+@app.get("/api/roadmap")
+async def get_latest_roadmap(
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Get the student's latest saved learning roadmap with task progress."""
+    from app.database.models import LearningRoadmap, TaskProgress
+
+    roadmaps_query = db.query(LearningRoadmap).filter(LearningRoadmap.user_id == current_user.id)
+    roadmap_count = roadmaps_query.count()
+    roadmap = roadmaps_query.order_by(LearningRoadmap.id.desc()).first()
+
+    if not roadmap:
+        return {"success": True, "data": {"roadmap": None, "roadmap_count": 0}}
+
+    progress_rows = db.query(TaskProgress).filter(TaskProgress.user_id == current_user.id).all()
+    progress_by_task = {p.task_id: p.status for p in progress_rows}
+
+    phases_out = []
+    for phase in sorted(roadmap.phases, key=lambda p: p.phase_order):
+        tasks_out = []
+        for task in sorted(phase.tasks, key=lambda t: t.order_index):
+            tasks_out.append({
+                "id": task.id,
+                "task_name": task.task_name,
+                "task_description": task.task_description or "",
+                "skill_focus": task.skill_focus or "",
+                "estimated_duration": task.estimated_duration or "",
+                "completion_criteria": task.completion_criteria or "",
+                "status": progress_by_task.get(task.id, "not_started"),
+            })
+        phases_out.append({
+            "id": phase.id,
+            "phase_name": phase.phase_name,
+            "phase_order": phase.phase_order,
+            "description": phase.description or "",
+            "estimated_duration": phase.estimated_duration or "",
+            "tasks": tasks_out,
+        })
+
+    return {
+        "success": True,
+        "data": {
+            "roadmap_count": roadmap_count,
+            "roadmap": {
+                "id": roadmap.id,
+                "title": roadmap.title,
+                "description": roadmap.description or "",
+                "phases": phases_out,
+            },
+        },
+    }
 
 # Request/response schemas for resource recommendations
 class ResourceRecommendationRequest(BaseModel):
@@ -288,8 +457,10 @@ async def login(
     """User login with JWT token."""
     from app.database.models import User
 
-    # Find user by username
-    user = db.query(User).filter(User.username == form_data.username).first()
+    # Find user by username or email
+    user = db.query(User).filter(
+        (User.username == form_data.username) | (User.email == form_data.username)
+    ).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
@@ -322,23 +493,37 @@ async def get_profile(
     db: Session = Depends(get_db),
 ):
     """Get current student profile."""
-    from app.database.models import StudentProfile
+    from app.database.models import StudentProfile, StudentSkill
 
     profile = db.query(StudentProfile).filter(StudentProfile.user_id == current_user.id).first()
+    user_skills = db.query(StudentSkill).filter(StudentSkill.user_id == current_user.id).all()
 
     if not profile:
         # Return default profile if none exists
-        return {"success": True, "data": {"name": current_user.username, "email": current_user.email, "skills": []}}
+        return {
+            "success": True,
+            "data": {
+                "name": current_user.username,
+                "email": current_user.email,
+                "institution": "",
+                "degree": "",
+                "academic_year": "",
+                "interests": "",
+                "learning_goals": "",
+                "skills": [skill.skill_name for skill in user_skills],
+            },
+        }
 
     return {"success": True, "data": {
         "id": profile.id,
-        "name": profile.name,
-        "institution": profile.institution,
-        "degree": profile.degree,
-        "academic_year": profile.academic_year,
-        "interests": profile.interests,
-        "learning_goals": profile.learning_goals,
-        "skills": [skill.skill_name for skill in profile.skills]
+        "name": profile.name or current_user.username,
+        "email": current_user.email,
+        "institution": profile.institution or "",
+        "degree": profile.degree or "",
+        "academic_year": profile.academic_year or "",
+        "interests": profile.interests or "",
+        "learning_goals": profile.learning_goals or "",
+        "skills": [skill.skill_name for skill in user_skills],
     }}
 
 
@@ -541,15 +726,40 @@ async def get_progress(
     db: Session = Depends(get_db),
 ):
     """Get learning progress."""
-    from app.database.models import TaskProgress, RoadmapTask, LearningRoadmap
+    from app.database.models import TaskProgress, RoadmapTask, RoadmapPhase, LearningRoadmap
 
-    # Get all tasks for this user
-    tasks = db.query(TaskProgress).filter(TaskProgress.user_id == current_user.id).all()
-    total_tasks = db.query(RoadmapTask).join(LearningRoadmap).filter(
-        LearningRoadmap.user_id == current_user.id
-    ).count()
+    roadmaps_query = db.query(LearningRoadmap).filter(LearningRoadmap.user_id == current_user.id)
+    roadmap_count = roadmaps_query.count()
+    latest_roadmap = roadmaps_query.order_by(LearningRoadmap.id.desc()).first()
 
-    completed_tasks = sum(1 for t in tasks if t.status == "completed")
+    # Get all tasks across the user's roadmaps (or latest roadmap if present)
+    progress_rows = db.query(TaskProgress).filter(TaskProgress.user_id == current_user.id).all()
+    status_by_task = {t.task_id: t.status for t in progress_rows}
+
+    if latest_roadmap:
+        phase_summaries = []
+        total_tasks = 0
+        completed_tasks = 0
+        for phase in sorted(latest_roadmap.phases, key=lambda p: p.phase_order):
+            phase_tasks = phase.tasks
+            phase_total = len(phase_tasks)
+            phase_completed = sum(1 for task in phase_tasks if status_by_task.get(task.id) == "completed")
+            total_tasks += phase_total
+            completed_tasks += phase_completed
+            phase_pct = int(phase_completed / phase_total * 100) if phase_total > 0 else 0
+            phase_summaries.append({
+                "phase_id": phase.id,
+                "phase_name": phase.phase_name,
+                "completed": phase_completed,
+                "total": phase_total,
+                "percentage": phase_pct,
+            })
+    else:
+        phase_summaries = []
+        total_tasks = db.query(RoadmapTask).join(RoadmapPhase).join(LearningRoadmap).filter(
+            LearningRoadmap.user_id == current_user.id
+        ).count()
+        completed_tasks = sum(1 for t in progress_rows if t.status == "completed")
 
     percentage = int(completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
 
@@ -557,9 +767,11 @@ async def get_progress(
         "completed": completed_tasks,
         "total": total_tasks,
         "percentage": percentage,
+        "roadmap_count": roadmap_count,
+        "phases": phase_summaries,
         "task_details": [
             {"task_id": t.task_id, "status": t.status}
-            for t in tasks
+            for t in progress_rows
         ]
     }}
 
@@ -574,7 +786,7 @@ async def update_progress(
     db: Session = Depends(get_db),
 ):
     """Update task progress with JSON body validation."""
-    from app.database.models import TaskProgress
+    from app.database.models import TaskProgress, RoadmapTask, RoadmapPhase, LearningRoadmap
 
     progress = db.query(TaskProgress).filter(
         TaskProgress.user_id == current_user.id,
@@ -582,15 +794,33 @@ async def update_progress(
     ).first()
 
     if not progress:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {task_id} not found",
+        task_exists = (
+            db.query(RoadmapTask)
+            .join(RoadmapPhase)
+            .join(LearningRoadmap)
+            .filter(RoadmapTask.id == task_id, LearningRoadmap.user_id == current_user.id)
+            .first()
         )
+        if not task_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task {task_id} not found",
+            )
+        progress = TaskProgress(
+            user_id=current_user.id,
+            task_id=task_id,
+            status=progress_data.status,
+        )
+        db.add(progress)
 
     progress.status = progress_data.status
+    if progress_data.status == "completed":
+        progress.completed_at = datetime.utcnow()
+    else:
+        progress.completed_at = None
     db.commit()
 
-    return {"success": True, "data": {"message": f"Task {task_id} marked as {progress_data.status}"}}
+    return {"success": True, "data": {"message": f"Task {task_id} marked as {progress_data.status}", "status": progress.status}}
 
 @app.get("/")
 async def root():
@@ -598,17 +828,28 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "environment": "development", "ai_provider": "gemini", "ai_status": "demo_mode"}
+    is_demo = not ai_service.is_configured
+    return {
+        "status": "healthy",
+        "environment": settings.ENVIRONMENT,
+        "ai_provider": settings.AI_PROVIDER,
+        "ai_status": "demo_mode" if is_demo else "configured",
+    }
 
 # Demo endpoint for when no API key is configured
 @app.get("/api/demo-mode")
 async def demo_mode():
     """Check if running in demo mode."""
-    from app.services.ai.service import AIService
-    ai_service_demo = AIService()
+    is_demo = not ai_service.is_configured
     return {
-        "demo_mode": ai_service_demo.provider is None,
-        "message": "Running in demo mode - AI provider not configured" if ai_service_demo.provider is None else "AI provider configured"
+        "demo_mode": is_demo,
+        "ai_provider": settings.AI_PROVIDER,
+        "ai_model": settings.AI_MODEL or ("gemini-3-flash-preview" if settings.AI_PROVIDER.lower() == "gemini" else "default"),
+        "message": (
+            "Running in demo mode - AI provider not configured"
+            if is_demo
+            else f"AI provider '{settings.AI_PROVIDER}' configured"
+        ),
     }
 
 if __name__ == "__main__":
