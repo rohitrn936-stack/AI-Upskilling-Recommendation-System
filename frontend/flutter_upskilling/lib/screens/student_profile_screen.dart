@@ -165,8 +165,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       try {
         await APIClient.updateProfile(
           name: nameCtrl.text.trim(),
-          institution: instCtrl.text.trim(),
-          degree: degCtrl.text.trim(),
+          institution: degCtrl.text.trim(),
+          degree: instCtrl.text.trim(),
           academicYear: yearCtrl.text.trim(),
           interests: intCtrl.text.trim(),
           learningGoals: goalCtrl.text.trim(),

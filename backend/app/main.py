@@ -617,6 +617,14 @@ async def add_skill(
             detail="skill_name is required",
         )
 
+    # Validate allowed proficiency levels
+    valid_proficiencies = ["beginner", "intermediate", "advanced", "expert"]
+    if proficiency_level not in valid_proficiencies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid proficiency level '{proficiency_level}'. Allowed values: {', '.join(valid_proficiencies)}",
+        )
+
     new_skill = StudentSkill(
         user_id=current_user.id,
         skill_name=skill_name,
