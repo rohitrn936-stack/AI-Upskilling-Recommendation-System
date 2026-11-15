@@ -76,6 +76,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  static const List<SupportedAIProvider> _supportedProviders = [
+    SupportedAIProvider(
+      id: 'gemini',
+      name: 'Google Gemini',
+      badge: 'Cloud AI',
+      description: 'Google Cloud Gemini generative models (gemini-3-flash-preview)',
+      defaultModel: 'gemini-3-flash-preview',
+      icon: Icons.auto_awesome_rounded,
+      requiresApiKey: true,
+      requiresBaseUrl: false,
+    ),
+    SupportedAIProvider(
+      id: 'ollama',
+      name: 'Ollama',
+      badge: 'Local & Private',
+      description: 'Self-hosted LLMs running on localhost:11434 (llama3.2, mistral)',
+      defaultModel: 'llama3.2',
+      icon: Icons.memory_rounded,
+      requiresApiKey: false,
+      requiresBaseUrl: true,
+    ),
+    SupportedAIProvider(
+      id: 'compatible',
+      name: 'OpenAI-Compatible',
+      badge: 'Universal API',
+      description: 'OpenAI-compatible inference REST API (Groq, Together, vLLM)',
+      defaultModel: 'gpt-4o-mini',
+      icon: Icons.hub_outlined,
+      requiresApiKey: true,
+      requiresBaseUrl: true,
+    ),
+  ];
+
   Future<void> _showProviderSelectionDialog() async {
     String tempProvider = _aiProvider;
 
@@ -91,19 +124,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Icon(Icons.tune_rounded, color: AppColors.primary, size: 22),
               SizedBox(width: 10),
               Text(
-                'Select AI Provider',
+                'Supported AI Providers',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
             ],
           ),
           content: SizedBox(
-            width: 440,
+            width: 480,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Select the active AI engine for career recommendations, skill gap analysis, and roadmap generation.',
+                  'Select from the supported AI providers below. Each provider supports distinct models and runtime environments:',
                   style: TextStyle(
                     fontSize: 13.5,
                     color: AppColors.textSecondary,
@@ -122,32 +155,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
                 const SizedBox(height: 16),
-                _buildProviderSelectionTile(
-                  id: 'gemini',
-                  name: 'Google Gemini',
-                  subtitle: 'Google Cloud Gemini generative models',
-                  icon: Icons.auto_awesome_rounded,
-                  current: tempProvider,
-                  onSelect: () => setDialogState(() => tempProvider = 'gemini'),
-                ),
-                const SizedBox(height: 8),
-                _buildProviderSelectionTile(
-                  id: 'ollama',
-                  name: 'Ollama (Local LLM)',
-                  subtitle: 'Self-hosted LLMs running on localhost:11434',
-                  icon: Icons.memory_rounded,
-                  current: tempProvider,
-                  onSelect: () => setDialogState(() => tempProvider = 'ollama'),
-                ),
-                const SizedBox(height: 8),
-                _buildProviderSelectionTile(
-                  id: 'compatible',
-                  name: 'OpenAI-Compatible',
-                  subtitle: 'OpenAI-compatible inference endpoint',
-                  icon: Icons.hub_outlined,
-                  current: tempProvider,
-                  onSelect: () => setDialogState(() => tempProvider = 'compatible'),
-                ),
+                ..._supportedProviders.map((provider) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildProviderSelectionTile(
+                      provider: provider,
+                      current: tempProvider,
+                      onSelect: () => setDialogState(() => tempProvider = provider.id),
+                    ),
+                  );
+                }),
               ],
             ),
           ),
@@ -172,19 +189,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildProviderSelectionTile({
-    required String id,
-    required String name,
-    required String subtitle,
-    required IconData icon,
+    required SupportedAIProvider provider,
     required String current,
     required VoidCallback onSelect,
   }) {
-    final isSelected = id == current;
+    final isSelected = provider.id == current;
+    final badgeColor = provider.id == 'gemini'
+        ? AppColors.primary
+        : provider.id == 'ollama'
+            ? AppColors.success
+            : AppColors.secondary;
+
     return InkWell(
       onTap: onSelect,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
               ? AppColors.primary.withValues(alpha: 0.08)
@@ -196,48 +216,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(
-              icon,
-              color: isSelected ? AppColors.primary : AppColors.textMuted,
-              size: 22,
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                provider.icon,
+                color: isSelected ? AppColors.primary : AppColors.textMuted,
+                size: 22,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Text(
+                        provider.name,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      StatusPill(
+                        label: provider.badge,
+                        color: badgeColor,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
                   Text(
-                    name,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected
-                          ? AppColors.primary
-                          : AppColors.textPrimary,
+                    provider.description,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                      height: 1.35,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        'Default: ${provider.defaultModel}',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const Text('•', style: TextStyle(color: AppColors.textMuted)),
+                      Text(
+                        provider.requiresApiKey ? 'Requires API Key' : 'No Key Required',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: provider.requiresApiKey ? AppColors.info : AppColors.success,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.border,
-                  width: isSelected ? 6 : 2,
+            const SizedBox(width: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? AppColors.primary : AppColors.border,
+                    width: isSelected ? 6 : 2,
+                  ),
+                  color: isSelected ? Colors.white : Colors.transparent,
                 ),
-                color: isSelected ? Colors.white : Colors.transparent,
               ),
             ),
           ],
@@ -505,4 +567,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+class SupportedAIProvider {
+  final String id;
+  final String name;
+  final String badge;
+  final String description;
+  final String defaultModel;
+  final IconData icon;
+  final bool requiresApiKey;
+  final bool requiresBaseUrl;
+
+  const SupportedAIProvider({
+    required this.id,
+    required this.name,
+    required this.badge,
+    required this.description,
+    required this.defaultModel,
+    required this.icon,
+    this.requiresApiKey = false,
+    this.requiresBaseUrl = false,
+  });
 }

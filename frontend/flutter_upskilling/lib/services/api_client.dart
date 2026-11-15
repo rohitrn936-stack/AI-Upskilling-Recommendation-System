@@ -290,6 +290,17 @@ class APIClient {
     return _handleResponse(response);
   }
 
+  static Future<List<dynamic>> getSupportedAiProviders() async {
+    final uri = Uri.parse('$_baseUrl/api/ai/providers');
+    final response = await http.get(
+      uri,
+      headers: await buildHeaders(),
+    );
+
+    final result = _handleResponse(response);
+    return result['data']?['providers'] as List<dynamic>? ?? [];
+  }
+
   static Future<Map<String, dynamic>> getHealth() async {
     final uri = Uri.parse('$_baseUrl/health');
     final response = await http.get(

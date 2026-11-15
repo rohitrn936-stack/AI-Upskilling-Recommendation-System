@@ -861,5 +861,47 @@ async def demo_mode():
         ),
     }
 
+# Supported AI Provider options
+SUPPORTED_AI_PROVIDERS = [
+    {
+        "id": "gemini",
+        "name": "Google Gemini",
+        "badge": "Cloud AI",
+        "description": "Google Cloud Generative AI with state-of-the-art reasoning",
+        "default_model": "gemini-3-flash-preview",
+        "requires_api_key": True,
+        "requires_base_url": False,
+    },
+    {
+        "id": "ollama",
+        "name": "Ollama",
+        "badge": "Local & Private",
+        "description": "Locally hosted open-source LLMs running on localhost:11434",
+        "default_model": "llama3.2",
+        "requires_api_key": False,
+        "requires_base_url": True,
+    },
+    {
+        "id": "compatible",
+        "name": "OpenAI-Compatible",
+        "badge": "Universal API",
+        "description": "Compatible REST inference endpoints (Groq, Together, vLLM)",
+        "default_model": "gpt-4o-mini",
+        "requires_api_key": True,
+        "requires_base_url": True,
+    },
+]
+
+@app.get("/api/ai/providers")
+async def list_ai_providers():
+    """List all supported AI providers."""
+    return {
+        "success": True,
+        "data": {
+            "current_provider": settings.AI_PROVIDER.lower(),
+            "providers": SUPPORTED_AI_PROVIDERS,
+        },
+    }
+
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
