@@ -8,6 +8,7 @@ import uvicorn
 from app.database.connection import SessionLocal, engine
 from app.database.models import Base
 from app.core.config import settings
+from app.core.encryption import encrypt_api_key, decrypt_api_key, is_encryption_available
 from app.services.ai.service import AIService
 
 # Initialize AI service
@@ -117,6 +118,21 @@ Base.metadata.create_all(bind=engine)
 # AI endpoints with Pydantic request validation
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
+
+# ============ API KEY CONFIGURATION SCHEMAS ============
+
+class ApiKeyConfigureRequest(BaseModel):
+    """Request to configure or update a user's AI API key."""
+    api_key: str = Field(..., description="The AI provider API key to store")
+    validate: bool = Field(default=True, description="Whether to validate the key with the provider")
+
+class ApiKeyStatusResponse(BaseModel):
+    """Response for API key status check."""
+    success: bool
+    configured: bool
+    valid: bool
+    provider: str
+    message: str
 
 # Request/response schemas for career recommendations
 class CareerRecommendationRequest(BaseModel):
@@ -475,6 +491,221 @@ async def login(
     )
 
     return {"success": True, "data": {"access_token": access_token, "token_type": "bearer"}}
+
+# ============ API KEY CONFIGURATION ENDPOINTS ============
+
+@app.post("/api/ai/api-key", response_model=ApiKeyStatusResponse)
+async def configure_api_key(
+    request: ApiKeyConfigureRequest,
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Configure or update the authenticated user's AI API key.
+
+    The API key is encrypted at rest and stored in the user's database record.
+    If [validate] is true, the key is tested against the configured AI provider.
+    """
+    from app.services.ai.service import AIService
+    from app.services.ai.providers.base import AIProviderError
+
+    user = current_user
+
+    # Encrypt the API key at rest
+    encrypted_key = encrypt_api_key(request.api_key)
+
+    if encrypted_key is None:
+        # Encryption not configured; store with warning
+        user.api_key = request.api_key
+        db.commit()
+        return {
+            "success": True,
+            "configured": True,
+            "valid": False,
+            "provider": settings.AI_PROVIDER,
+            "message": "API key stored without encryption (CRYPTO_KEY not configured). "
+                       "Configure CRYPTO_KEY environment variable for production use.",
+        }
+
+    user.api_key = encrypted_key
+    db.commit()
+
+    # Optionally validate the key
+    if request.validate:
+        try:
+            # Create a temporary provider to validate the key
+            temp_service = AIService()
+            # Override the config with the user's key
+            temp_service.provider = None
+            temp_service._provider_type = settings.AI_PROVIDER.lower()
+            temp_service._config = {
+                "provider": settings.AI_PROVIDER,
+                "model": settings.AI_MODEL,
+                "api_key": request.api_key,
+                "base_url": settings.AI_BASE_URL,
+                "temperature": settings.AI_TEMPERATURE,
+                "timeout": settings.AI_TIMEOUT,
+                "max_retries": settings.AI_MAX_RETRIES,
+            }
+            temp_service._initialize_provider()
+
+            if not temp_service.is_configured:
+                return {
+                    "success": True,
+                    "configured": True,
+                    "valid": False,
+                    "provider": settings.AI_PROVIDER,
+                    "message": "API key stored but validation failed - "
+                               "the key may be invalid or incomplete for the selected provider.",
+                }
+
+            # Perform a quick health check
+            is_healthy = await temp_service.provider.health_check()
+            if not is_healthy:
+                return {
+                    "success": True,
+                    "configured": True,
+                    "valid": False,
+                    "provider": settings.AI_PROVIDER,
+                    "message": "API key stored but health check failed. "
+                               "The key may be invalid or the provider is unavailable.",
+                }
+
+            return {
+                "success": True,
+                "configured": True,
+                "valid": True,
+                "provider": settings.AI_PROVIDER,
+                "message": "API key successfully configured and validated.",
+            }
+        except AIProviderError as e:
+            return {
+                "success": True,
+                "configured": True,
+                "valid": False,
+                "provider": settings.AI_PROVIDER,
+                "message": f"API key stored but validation error: {str(e)}",
+            }
+        except Exception as e:
+            # Log the error but don't expose details
+            import traceback
+            traceback.print_exc()
+            return {
+                "success": True,
+                "configured": True,
+                "valid": False,
+                "provider": settings.AI_PROVIDER,
+                "message": "API key stored but validation encountered an error.",
+            }
+
+    # If validate is false, just mark as configured without validation
+    return {
+        "success": True,
+        "configured": True,
+        "valid": True,
+        "provider": settings.AI_PROVIDER,
+        "message": "API key configured (validation skipped).",
+    }
+
+
+@app.get("/api/ai/api-key-status", response_model=ApiKeyStatusResponse)
+async def get_api_key_status(
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Check the authenticated user's AI API key status.
+
+    Returns whether a key is configured, if it's valid, and the provider.
+    The actual API key is never returned or exposed.
+    """
+    from app.services.ai.service import AIService
+    from app.services.ai.providers.base import AIProviderError
+
+    user = current_user
+
+    # Check if the user has an API key stored
+    has_key = user.api_key is not None and user.api_key != ""
+
+    if not has_key:
+        return {
+            "success": True,
+            "configured": False,
+            "valid": False,
+            "provider": settings.AI_PROVIDER,
+            "message": "No API key configured for this user.",
+        }
+
+    # Decrypt the key for checking
+    encrypted_key = user.api_key
+    if is_encryption_available():
+        from app.core.encryption import decrypt_api_key
+        decrypted_key = decrypt_api_key(encrypted_key)
+    else:
+        decrypted_key = encrypted_key
+
+    # Determine validity by checking the provider
+    try:
+        temp_service = AIService()
+        temp_service.provider = None
+        temp_service._provider_type = settings.AI_PROVIDER.lower()
+        temp_service._config = {
+            "provider": settings.AI_PROVIDER,
+            "model": settings.AI_MODEL,
+            "api_key": decrypted_key or "",
+            "base_url": settings.AI_BASE_URL,
+            "temperature": settings.AI_TEMPERATURE,
+            "timeout": settings.AI_TIMEOUT,
+            "max_retries": settings.AI_MAX_RETRIES,
+        }
+        temp_service._initialize_provider()
+
+        if not temp_service.is_configured:
+            return {
+                "success": True,
+                "configured": True,
+                "valid": False,
+                "provider": settings.AI_PROVIDER,
+                "message": "API key is configured but validation failed - "
+                           "the key may be invalid or incomplete for the selected provider.",
+            }
+
+        # Perform health check
+        is_healthy = await temp_service.provider.health_check()
+        if not is_healthy:
+            return {
+                "success": True,
+                "configured": True,
+                "valid": False,
+                "provider": settings.AI_PROVIDER,
+                "message": "API key is configured but health check failed. "
+                           "The provider may be unavailable or the key is invalid.",
+            }
+
+        return {
+            "success": True,
+            "configured": True,
+            "valid": True,
+            "provider": settings.AI_PROVIDER,
+            "message": "API key is configured and validated.",
+        }
+    except AIProviderError as e:
+        return {
+            "success": True,
+            "configured": True,
+            "valid": False,
+            "provider": settings.AI_PROVIDER,
+            "message": "API key is configured but validation error: " + str(e),
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": True,
+            "configured": True,
+            "valid": False,
+            "provider": settings.AI_PROVIDER,
+            "message": "API key status check encountered an error.",
+        }
+
 
 # ============ PROTECTED ENDPOINTS ============
 
