@@ -57,6 +57,15 @@ class AIService:
             # we still want the app to work in demo mode
             print(f"AI provider initialization warning: {e}")
             self.provider = None
+
+    def set_provider(self, provider_type: str) -> None:
+        """Update active AI provider and re-initialize provider instance."""
+        self._provider_type = provider_type.lower().strip()
+        settings.AI_PROVIDER = self._provider_type
+        self._config = self._build_config()
+        self._initialized = False
+        self.provider = None
+        self._initialize_provider()
     
     @property
     def is_configured(self) -> bool:

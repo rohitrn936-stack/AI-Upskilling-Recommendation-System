@@ -301,6 +301,21 @@ class APIClient {
     return result['data']?['providers'] as List<dynamic>? ?? [];
   }
 
+  static Future<Map<String, dynamic>> setAiProvider(String provider) async {
+    final uri = Uri.parse('$_baseUrl/api/settings/ai-provider');
+    final body = json.encode({
+      'provider': provider,
+    });
+
+    final response = await http.post(
+      uri,
+      headers: await buildHeaders(),
+      body: body,
+    );
+
+    return _handleResponse(response);
+  }
+
   static Future<Map<String, dynamic>> getHealth() async {
     final uri = Uri.parse('$_baseUrl/health');
     final response = await http.get(

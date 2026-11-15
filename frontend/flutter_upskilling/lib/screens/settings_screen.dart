@@ -183,8 +183,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
 
     if (selected != null && selected != _aiProvider) {
-      setState(() => _aiProvider = selected);
-      _showInfo('Selected AI Provider: ${selected.toUpperCase()}');
+      setState(() => _isLoading = true);
+      try {
+        final res = await APIClient.setAiProvider(selected);
+        final data = res['data'] as Map<String, dynamic>? ?? {};
+        final updatedProvider = (data['ai_provider'] ?? selected).toString();
+        final msg = (data['message'] ??
+                'AI provider updated to ${updatedProvider.toUpperCase()}')
+            .toString();
+
+        await _loadSettings();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceFirst('Exception: ', '')),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
     }
   }
 

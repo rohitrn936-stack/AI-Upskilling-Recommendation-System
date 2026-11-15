@@ -903,5 +903,34 @@ async def list_ai_providers():
         },
     }
 
+class AIProviderUpdateRequest(BaseModel):
+    provider: str = Field(..., description="Provider name: gemini, ollama, or compatible")
+
+@app.post("/api/settings/ai-provider")
+async def update_ai_provider(payload: AIProviderUpdateRequest):
+    """Save selected AI provider to backend settings and reconfigure AI service."""
+    raw_provider = payload.provider.strip().lower()
+    valid_ids = [p["id"] for p in SUPPORTED_AI_PROVIDERS]
+
+    if raw_provider not in valid_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported AI provider '{payload.provider}'. Supported options: {', '.join(valid_ids)}",
+        )
+
+    ai_service.set_provider(raw_provider)
+    matched = next((p for p in SUPPORTED_AI_PROVIDERS if p["id"] == raw_provider), None)
+    default_model = matched["default_model"] if matched else "default"
+
+    return {
+        "success": True,
+        "data": {
+            "ai_provider": raw_provider,
+            "ai_model": settings.AI_MODEL or default_model,
+            "is_configured": ai_service.is_configured,
+            "message": f"AI provider successfully updated to '{raw_provider}'",
+        },
+    }
+
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
