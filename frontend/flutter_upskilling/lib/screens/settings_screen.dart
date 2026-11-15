@@ -109,6 +109,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ),
   ];
 
+  SupportedAIProvider get _activeProvider {
+    return _supportedProviders.firstWhere(
+      (p) => p.id.toLowerCase() == _aiProvider.toLowerCase(),
+      orElse: () => SupportedAIProvider(
+        id: _aiProvider,
+        name: _aiProvider.isEmpty ? 'Google Gemini' : _aiProvider.toUpperCase(),
+        badge: 'Active',
+        description: 'Active provider configured on backend',
+        defaultModel: _aiModel,
+        icon: Icons.auto_awesome_rounded,
+        requiresApiKey: true,
+        requiresBaseUrl: false,
+      ),
+    );
+  }
+
   Future<void> _showProviderSelectionDialog() async {
     String tempProvider = _aiProvider;
 
@@ -135,6 +151,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_outline_rounded,
+                        color: AppColors.success,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Currently Active: ${_activeProvider.name} (${_activeProvider.badge})',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 const Text(
                   'Select from the supported AI providers below. Each provider supports distinct models and runtime environments:',
                   style: TextStyle(
@@ -161,6 +208,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: _buildProviderSelectionTile(
                       provider: provider,
                       current: tempProvider,
+                      isActive: provider.id.toLowerCase() == _aiProvider.toLowerCase(),
                       onSelect: () => setDialogState(() => tempProvider = provider.id),
                     ),
                   );
@@ -221,6 +269,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildProviderSelectionTile({
     required SupportedAIProvider provider,
     required String current,
+    required bool isActive,
     required VoidCallback onSelect,
   }) {
     final isSelected = provider.id == current;
@@ -278,6 +327,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         label: provider.badge,
                         color: badgeColor,
                       ),
+                      if (isActive) ...[
+                        const SizedBox(width: 6),
+                        const StatusPill(
+                          label: 'ACTIVE',
+                          color: AppColors.success,
+                          icon: Icons.check_circle_rounded,
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -409,7 +466,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildApiSettings() {
-    final providerLabel = _aiProvider.toUpperCase();
+    final active = _activeProvider;
     final modeSubtitle = _demoMode
         ? 'Demo mode active (configured in backend/.env)'
         : 'API key configured on backend';
@@ -438,30 +495,165 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          _buildSettingTile(
-            icon: Icons.flash_on_rounded,
-            title: 'AI Provider',
-            subtitle:
-                '$providerLabel (${_demoMode ? 'demo mode' : 'configured'})',
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
+          const SizedBox(height: 16),
+          // Active AI Provider Highlight Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.2),
+                width: 1.2,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                StatusPill(
-                  label: providerLabel,
-                  color: _demoMode ? AppColors.primary : AppColors.success,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        active.icon,
+                        color: AppColors.primary,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                active.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const StatusPill(
+                                label: 'ACTIVE',
+                                color: AppColors.success,
+                                icon: Icons.check_circle_rounded,
+                              ),
+                              const SizedBox(width: 6),
+                              StatusPill(
+                                label: active.badge,
+                                color: active.id == 'gemini'
+                                    ? AppColors.primary
+                                    : active.id == 'ollama'
+                                        ? AppColors.success
+                                        : AppColors.secondary,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            active.description,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: _showProviderSelectionDialog,
+                      icon: const Icon(Icons.tune_rounded, size: 16),
+                      label: const Text('Change Provider'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                const Icon(
-                  Icons.arrow_drop_down_rounded,
-                  color: AppColors.textMuted,
-                  size: 20,
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 6,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.smart_toy_outlined,
+                            size: 15,
+                            color: AppColors.textMuted,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Active Model: $_aiModel',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            active.requiresApiKey
+                                ? Icons.vpn_key_outlined
+                                : Icons.lock_open_rounded,
+                            size: 15,
+                            color: active.requiresApiKey && _demoMode
+                                ? AppColors.warning
+                                : AppColors.success,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            active.requiresApiKey
+                                ? (_demoMode
+                                    ? 'Key Required (Demo Mode)'
+                                    : 'Key Configured')
+                                : 'No API Key Required',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: active.requiresApiKey && _demoMode
+                                  ? AppColors.warning
+                                  : AppColors.success,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            onTap: _showProviderSelectionDialog,
           ),
-          const Divider(height: 1),
+          const SizedBox(height: 14),
           _buildSettingTile(
             icon: Icons.vpn_key_outlined,
             title: 'AI API Key Status',
