@@ -19,9 +19,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _demoMode = true;
   String _aiProvider = 'gemini';
   String _aiModel = 'gemini-pro';
+  bool _hasSavedSelection = false;
   String _environment = 'development';
   String _backendStatus = 'healthy';
   String _statusMessage = '';
+
+  static const Map<String, List<String>> _aiModelsByProvider = {
+    'gemini': ['gemini-pro', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    'ollama': ['llama3', 'mistral', 'codellama'],
+    'compatible': ['gpt-3.5-turbo', 'gpt-4', 'claude-3-haiku'],
+  };
 
   @override
   void initState() {
@@ -36,6 +43,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
+      // Load saved selection first, fall back to backend-reported config
+      final savedProvider = await APIClient.getSavedAiProvider();
+      final savedModel = await APIClient.getSavedAiModel();
+      final hasSaved = savedProvider != null && savedModel != null;
+
       final results = await Future.wait([
         APIClient.getDemoMode(),
         APIClient.getHealth(),
@@ -47,11 +59,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _demoMode = demoData['demo_mode'] == true;
-        _aiProvider = (demoData['ai_provider'] ??
-                healthData['ai_provider'] ??
-                'gemini')
-            .toString();
-        _aiModel = (demoData['ai_model'] ?? 'gemini-pro').toString();
+        if (hasSaved) {
+          _aiProvider = savedProvider;
+          _aiModel = savedModel;
+          _hasSavedSelection = true;
+        } else {
+          _aiProvider = (demoData['ai_provider'] ??
+                  healthData['ai_provider'] ??
+                  'gemini')
+              .toString();
+          _aiModel = (demoData['ai_model'] ?? 'gemini-pro').toString();
+          _hasSavedSelection = false;
+        }
         _statusMessage = (demoData['message'] ?? '').toString();
         _environment =
             (healthData['environment'] ?? 'development').toString();
@@ -147,7 +166,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildApiSettings() {
-    final providerLabel = _aiProvider.toUpperCase();
     final modeSubtitle = _demoMode
         ? 'Demo mode active (configured in backend/.env)'
         : 'API key configured on backend';
@@ -177,21 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          _buildSettingTile(
-            icon: Icons.flash_on_rounded,
-            title: 'AI Provider',
-            subtitle:
-                '$providerLabel (${_demoMode ? 'demo mode' : 'configured'})',
-            trailing: StatusPill(
-              label: providerLabel,
-              color: _demoMode ? AppColors.primary : AppColors.success,
-            ),
-            onTap: () => _showInfo(
-              _statusMessage.isNotEmpty
-                  ? _statusMessage
-                  : 'Configured via backend/.env AI_PROVIDER setting.',
-            ),
-          ),
+          _buildAiProviderDropdown(),
           const Divider(height: 1),
           _buildSettingTile(
             icon: Icons.vpn_key_outlined,
@@ -202,11 +206,141 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const Divider(height: 1),
-          _buildSettingTile(
-            icon: Icons.smart_toy_outlined,
-            title: 'Active Model',
-            subtitle: _aiModel,
-            onTap: () => _showInfo('Active backend AI model: $_aiModel'),
+          _buildAiModelDropdown(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiProviderDropdown() {
+    final providerLabel = _aiProvider.toUpperCase();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AI Provider',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: _aiProvider,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.primary),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'gemini', child: Text('Gemini')),
+              DropdownMenuItem(value: 'ollama', child: Text('Ollama')),
+              DropdownMenuItem(
+                  value: 'compatible', child: Text('Compatible')),
+            ],
+            onChanged: (value) async {
+              if (value == null) return;
+              await APIClient.saveAiProvider(value);
+              final models = _aiModelsByProvider[value] ?? [];
+              final newModel = models.isNotEmpty ? models.first : _aiModel;
+              await APIClient.saveAiModel(newModel);
+              if (!mounted) return;
+              setState(() {
+                _aiProvider = value;
+                _aiModel = newModel;
+                _hasSavedSelection = true;
+              });
+            },
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$providerLabel ${_demoMode ? '(demo mode)' : '(configured)'}. Saved to device.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiModelDropdown() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AI Model',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            key: ValueKey('model_dropdown_$_aiProvider'),
+            initialValue: _aiModel,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.primary),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
+            ),
+            items: _aiModelsByProvider[_aiProvider]!
+                .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                .toList(),
+            onChanged: (value) async {
+              if (value == null) return;
+              await APIClient.saveAiModel(value);
+              if (!mounted) return;
+              setState(() {
+                _aiModel = value;
+                _hasSavedSelection = true;
+              });
+            },
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Active model: $_aiModel${_hasSavedSelection ? ' (saved)' : ' (from backend)'}.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
