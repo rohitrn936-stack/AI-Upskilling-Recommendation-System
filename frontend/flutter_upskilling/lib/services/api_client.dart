@@ -161,6 +161,35 @@ class APIClient {
     return _handleResponse(response);
   }
 
+  // --- API key configuration ---
+
+  static Future<Map<String, dynamic>> configureApiKey({
+    required String apiKey,
+    required bool validate,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/api/ai/api-key');
+    final response = await http.post(
+      uri,
+      headers: await buildHeaders(),
+      body: json.encode({
+        'api_key': apiKey,
+        'validate': validate,
+      }),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> getApiKeyStatus() async {
+    final uri = Uri.parse('$_baseUrl/api/ai/api-key-status');
+    final response = await http.get(
+      uri,
+      headers: await buildHeaders(),
+    );
+
+    return _handleResponse(response);
+  }
+
   // --- AI endpoints ---
 
   static Future<Map<String, dynamic>> getCareerRecommendations({required List<String> skills, required Map<String, String> proficiency, required String interests, required String academicBackground}) async {

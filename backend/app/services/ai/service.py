@@ -2,6 +2,7 @@ from typing import Any, Optional, Dict, List
 import json
 import asyncio
 
+from app.database.models import User
 from app.services.ai.providers.base import (
     AIProvider,
     AIProviderFactory,
@@ -22,17 +23,29 @@ class AIService:
     - Personalized skill suggestions
     - Learning roadmap generation
     - Learning resource recommendations
+    
+    Support for per-user API key override: if a user has configured their own
+    API key via the backend, it will take precedence over the global setting.
+    The user parameter can be passed to configure the service with a specific
+    user's encrypted API key.
     """
     
-    def __init__(self):
+    def __init__(self, user: Optional[User] = None):
         self.provider: Optional[AIProvider] = None
         self._initialized = False
+        self._user = user
         self._provider_type = settings.AI_PROVIDER.lower()
         self._config = self._build_config()
     
     def _build_config(self) -> Dict[str, Any]:
-        """Build the AI provider configuration from environment settings."""
-        return {
+        """Build the AI provider configuration from environment settings.
+        
+        If a per-user API key is available (from the authenticated user),
+        it takes precedence over the global AI_API_KEY setting.
+        The user's key is decrypted at build time if encryption is configured.
+        """
+        # Start with global config
+        config: Dict[str, Any] = {
             "provider": settings.AI_PROVIDER,
             "model": settings.AI_MODEL,
             "api_key": settings.AI_API_KEY,
@@ -41,6 +54,19 @@ class AIService:
             "timeout": settings.AI_TIMEOUT,
             "max_retries": settings.AI_MAX_RETRIES,
         }
+        
+        # Override with per-user key if available and user is provided
+        if self._user is not None and self._user.api_key is not None and self._user.api_key != "":
+            from app.core.encryption import decrypt_api_key, is_encryption_available
+            if is_encryption_available():
+                decrypted_key = decrypt_api_key(self._user.api_key)
+            else:
+                # Encryption not configured; store key in plaintext (not recommended for production)
+                decrypted_key = self._user.api_key
+            if decrypted_key:
+                config["api_key"] = decrypted_key
+        
+        return config
     
     def _initialize_provider(self) -> None:
         """Initialize the AI provider based on the configured type."""
@@ -73,14 +99,26 @@ class AIService:
         self._initialize_provider()
         if not self.provider:
             return False
-        if self._provider_type == "gemini" and not settings.AI_API_KEY:
+        if self._provider_type == "gemini" and not settings.AI_API_KEY and (self._user is None or self._user.api_key is None or self._user.api_key == ""):
+            return False
+        # Check user key if available, otherwise fall back to global key
+        user_key = settings.AI_API_KEY
+        if self._user is not None and self._user.api_key is not None and self._user.api_key != "":
+            from app.core.encryption import decrypt_api_key, is_encryption_available
+            if is_encryption_available():
+                user_key = decrypt_api_key(self._user.api_key) or ""
+            else:
+                user_key = self._user.api_key or ""
+        else:
+            user_key = settings.AI_API_KEY
+        if self._provider_type == "gemini" and not user_key:
             return False
         if self._provider_type == "compatible" and (not settings.AI_BASE_URL or not settings.AI_MODEL):
             return False
         if self._provider_type == "ollama" and not settings.AI_MODEL:
             return False
         return True
-
+    
     async def generate(self, prompt: str, response_model: Optional[type] = None) -> Any:
         """Generate a response using the configured AI provider.
         
@@ -207,7 +245,7 @@ class AIService:
                 "demo_mode": True,
                 "message": "Demo mode: AI provider not configured. Showing default response.",
             }
-
+    
     @staticmethod
     def _parse_json_response(response: Any) -> Optional[Dict[str, Any]]:
         """Parse JSON string (including markdown-fenced JSON) into a dict."""
@@ -237,7 +275,7 @@ class AIService:
                 except json.JSONDecodeError:
                     return None
             return None
-
+    
     @staticmethod
     def _coerce_text(value: Any) -> str:
         """Convert LLM fields cleanly into a readable string."""
@@ -255,7 +293,7 @@ class AIService:
             parts = [f"{k}: {v}" for k, v in value.items()]
             return " | ".join(parts)
         return str(value).strip()
-
+    
     def _build_dynamic_demo_careers(
         self,
         skills: List[str],
@@ -328,7 +366,7 @@ class AIService:
             "recommendations": recommendations,
             "message": "Demo mode: Showing skill-matched career recommendations.",
         }
-
+    
     def _build_dynamic_demo_suggestions(
         self,
         existing_skills: List[str],
@@ -358,7 +396,7 @@ class AIService:
             "suggestions": suggestions,
             "message": "Demo mode: Showing suggestions based on your skill gaps.",
         }
-
+    
     def _build_dynamic_demo_roadmap(
         self,
         student_skills: List[Dict[str, str]],
@@ -366,7 +404,7 @@ class AIService:
     ) -> Dict[str, Any]:
         """Build a multi-phase learning roadmap tailored to missing skills in demo mode."""
         have = {s.get("skill_name", "").strip().lower() for s in student_skills if s.get("skill_name")}
-        req_names = [r.get("skill_name", "").strip() for r in career_requirements if r.get("skill_name")]
+        req_names = [r.get("skill_name", "") for r in career_requirements if r.get("skill_name")]
         missing = [r for r in req_names if r.lower() not in have]
 
         focus_skills = missing if missing else (req_names[:4] if req_names else ["Python", "Data Structures", "System Design", "Capstone Project"])
@@ -413,7 +451,7 @@ class AIService:
             },
             "message": "Demo mode: Generated roadmap from your missing skills.",
         }
-
+    
     def _build_dynamic_demo_resources(
         self,
         task_description: str,
@@ -483,7 +521,6 @@ class AIService:
                 "resource_name": f"{topic} Video Lecture Series (MIT OCW / freeCodeCamp)",
                 "platform": "MIT OpenCourseWare",
                 "description": f"Recorded university lectures and guided walkthroughs covering {topic}.",
-                "resource_type": "Video",
                 "url": "https://ocw.mit.edu/",
                 "estimated_learning_duration": "6 weeks",
             },
@@ -491,7 +528,6 @@ class AIService:
                 "resource_name": f"{topic} Companion Handbook & Open Textbooks",
                 "platform": "Open Textbook Library / Git-SCM",
                 "description": f"Comprehensive reading material and exercises to build depth in {topic}.",
-                "resource_type": "Book",
                 "url": "https://open.umn.edu/opentextbooks",
                 "estimated_learning_duration": "4 weeks",
             },
