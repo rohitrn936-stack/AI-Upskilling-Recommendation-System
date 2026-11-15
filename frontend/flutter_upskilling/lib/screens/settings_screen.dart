@@ -23,6 +23,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _backendStatus = 'healthy';
   String _statusMessage = '';
 
+  // API key configuration state
+  bool _isConfiguring = false;
+  String _apiKey = '';
+  bool _isKeyVisible = false;
+  String? _apiKeyStatusMessage;
+  bool _apiKeyConfigured = false;
+  bool _apiKeyValid = false;
+  String _apiProvider = 'gemini';
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +66,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             (healthData['environment'] ?? 'development').toString();
         _backendStatus = (healthData['status'] ?? 'healthy').toString();
       });
+
+      // Fetch API key status
+      await _fetchApiKeyStatus();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
@@ -67,6 +79,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _fetchApiKeyStatus() async {
+    try {
+      final result = await APIClient.getApiKeyStatus();
+      if (!mounted) return;
+      setState(() {
+        _apiKeyConfigured = result['configured'] ?? false;
+        _apiKeyValid = result['valid'] ?? false;
+        _apiProvider = result['provider'] ?? 'gemini';
+        _apiKeyStatusMessage = result['message'] ?? '';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _apiKeyStatusMessage = 'Failed to fetch API key status: $e';
+      });
+    }
+  }
+
   void _showInfo(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -74,6 +104,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppColors.primary,
       ),
     );
+  }
+
+  // Toggle API key visibility
+  void _toggleKeyVisibility() {
+    setState(() => _isKeyVisible = !_isKeyVisible);
   }
 
   @override
@@ -197,9 +232,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.vpn_key_outlined,
             title: 'AI API Key Status',
             subtitle: modeSubtitle,
-            onTap: () => _showInfo(
-              'Set AI_API_KEY in backend/.env and restart the backend server to enable live LLM generation.',
-            ),
+            onTap: _demoMode
+                ? null
+                : () {
+                    // Show the API key configuration interface
+                    _showApiKeyConfigurationDialog();
+                  },
           ),
           const Divider(height: 1),
           _buildSettingTile(
@@ -208,6 +246,134 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: _aiModel,
             onTap: () => _showInfo('Active backend AI model: $_aiModel'),
           ),
+          // API Key Configuration Section
+          if (!_demoMode) ...[
+            const Divider(height: 24),
+            AppCard(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'API Key Configuration',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // Status summary
+                  if (_apiKeyConfigured || _apiKeyStatusMessage != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _apiKeyValid
+                                ? Icons.check_circle_rounded
+                                : _apiKeyConfigured
+                                    ? Icons.warning_amber_rounded
+                                    : Icons.error_rounded,
+                            color: _apiKeyValid
+                                ? AppColors.success
+                                : _apiKeyConfigured
+                                    ? AppColors.warning
+                                    : AppColors.danger,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _apiKeyStatusMessage ??
+                                  'No API key configured',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: _apiKeyValid
+                                    ? AppColors.success
+                                    : _apiKeyConfigured
+                                        ? AppColors.warning
+                                        : AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // API key input field
+                  TextField(
+                    controller: TextEditingController()
+                      ..text = _apiKey.isNotEmpty ? '••••••••••' : '',
+                    obscure: !_isKeyVisible,
+                    obscuringCharacter: '•',
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    enableInteractiveSelection: false,
+                    decoration: InputDecoration(
+                      labelText: 'AI API Key',
+                      hintText: 'Enter your AI provider API key',
+                      border: const OutlineInputBorder(),
+                      suffixIcon: _isKeyVisible
+                          ? const Icon(Icons.visibility_off_rounded)
+                          : const Icon(Icons.visibility_rounded),
+                      suffixIconConstraints:
+                          const BoxConstraints(minWidth: 24, minHeight: 24),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() => _apiKey = value);
+                    },
+                    maxLines: 1,
+                  ),
+                  const SizedBox(height: 20),
+                  // Buttons row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _isConfiguring ? null : _configureApiKey,
+                          child: _isConfiguring
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Save'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      OutlinedButton(
+                        onPressed: () {
+                          setState(() => _apiKey = '');
+                        },
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Validation toggle
+                  SwitchListTile(
+                    title: const Text('Validate key with provider'),
+                    value: true,
+                    onChanged: (bool value) {
+                      // Validation is always performed; this is for future UI
+                      setState(() {});
+                    },
+                    subtitle: const Text(
+                      'Check if the key works with the selected AI provider',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 24),
+          ],
         ],
       ),
     );
@@ -327,5 +493,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  // Configure the API key via backend
+  Future<void> _configureApiKey() async {
+    setState(() => _isConfiguring = true);
+
+    try {
+      // Validate that a key was entered
+      if (_apiKey.trim().isEmpty) {
+        setState(() {
+          _apiKeyStatusMessage = 'Please enter an API key';
+          _apiKeyConfigured = false;
+          _apiKeyValid = false;
+        });
+        _showInfo('Please enter an API key');
+        return;
+      }
+
+      // Call the backend to configure the key
+      final result = await APIClient.configureApiKey(
+        apiKey: _apiKey.trim(),
+        validate: true,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _isConfiguring = false;
+      });
+
+      if (result['success'] ?? false) {
+        setState(() {
+          _apiKeyConfigured = result['configured'] ?? false;
+          _apiKeyValid = result['valid'] ?? false;
+          _apiProvider = result['provider'] ?? 'gemini';
+          _apiKeyStatusMessage = result['message'] ?? 'API key configured';
+          _apiKey = ''; // Clear the input field after successful save
+        });
+        _showInfo(_apiKeyStatusMessage ?? 'API key configured successfully');
+      } else {
+        setState(() {
+          _apiKeyConfigured = false;
+          _apiKeyValid = false;
+          _apiKeyStatusMessage = result['detail'] ?? 'Unknown error';
+        });
+        _showInfo(_apiKeyStatusMessage ?? 'Failed to configure API key');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isConfiguring = false);
+      setState(() {
+        _apiKeyConfigured = false;
+        _apiKeyValid = false;
+        _apiKeyStatusMessage = 'Error configuring API key: $e';
+      });
+      _showInfo('Error configuring API key: $e');
+    }
   }
 }
