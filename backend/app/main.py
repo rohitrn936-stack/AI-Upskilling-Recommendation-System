@@ -608,7 +608,8 @@ async def add_skill(
     from app.database.models import StudentSkill
 
     skill_name = skill_data.get("skill_name", "") if isinstance(skill_data, dict) else ""
-    proficiency_level = skill_data.get("proficiency_level", "beginner") if isinstance(skill_data, dict) else "beginner"
+    raw_level = skill_data.get("proficiency_level", "beginner") if isinstance(skill_data, dict) else "beginner"
+    proficiency_level = (raw_level or "beginner").strip().lower()
     category = skill_data.get("category", "") if isinstance(skill_data, dict) else ""
 
     if not skill_name:
@@ -617,12 +618,12 @@ async def add_skill(
             detail="skill_name is required",
         )
 
-    # Validate allowed proficiency levels
+    # Validate allowed proficiency levels (case-insensitive)
     valid_proficiencies = ["beginner", "intermediate", "advanced", "expert"]
     if proficiency_level not in valid_proficiencies:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid proficiency level '{proficiency_level}'. Allowed values: {', '.join(valid_proficiencies)}",
+            detail=f"Invalid proficiency level '{raw_level}'. Allowed values: {', '.join(valid_proficiencies)}",
         )
 
     new_skill = StudentSkill(
