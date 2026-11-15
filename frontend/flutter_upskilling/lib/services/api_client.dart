@@ -345,6 +345,29 @@ class APIClient {
     return _handleResponse(response);
   }
 
+    static Future<Map<String, dynamic>> getNotificationPreferences() async {
+    final uri = Uri.parse('$_baseUrl/api/settings/notifications');
+    final response = await http.get(
+      uri,
+      headers: await buildHeaders(),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> updateNotificationPreferences(
+    Map<String, bool> preferences,
+  ) async {
+    final uri = Uri.parse('$_baseUrl/api/settings/notifications');
+    final response = await http.put(
+      uri,
+      headers: await buildHeaders(),
+      body: json.encode(preferences),
+    );
+
+    return _handleResponse(response);
+  }
+  
   static Future<Map<String, dynamic>> getHealth() async {
     final uri = Uri.parse('$_baseUrl/health');
     final response = await http.get(
