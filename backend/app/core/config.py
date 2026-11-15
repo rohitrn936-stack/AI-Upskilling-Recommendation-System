@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = Field(default="http://localhost:3000,http://127.0.0.1:3000")
 
+    # Encryption key for API key storage (optional, for encrypting user API keys)
+    CRYPTO_KEY: str = Field(default="")
+
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE_PATH),
         extra="ignore",

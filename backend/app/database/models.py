@@ -25,6 +25,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    api_key = Column(String, nullable=True, index=True)
 
     # Relationships
     profile = relationship("StudentProfile", uselist=False, back_populates="user")
