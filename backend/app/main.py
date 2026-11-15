@@ -839,13 +839,22 @@ async def add_skill(
     from app.database.models import StudentSkill
 
     skill_name = skill_data.get("skill_name", "") if isinstance(skill_data, dict) else ""
-    proficiency_level = skill_data.get("proficiency_level", "beginner") if isinstance(skill_data, dict) else "beginner"
+    raw_level = skill_data.get("proficiency_level", "beginner") if isinstance(skill_data, dict) else "beginner"
+    proficiency_level = (raw_level or "beginner").strip().lower()
     category = skill_data.get("category", "") if isinstance(skill_data, dict) else ""
 
     if not skill_name:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="skill_name is required",
+        )
+
+    # Validate allowed proficiency levels (case-insensitive)
+    valid_proficiencies = ["beginner", "intermediate", "advanced", "expert"]
+    if proficiency_level not in valid_proficiencies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid proficiency level '{raw_level}'. Allowed values: {', '.join(valid_proficiencies)}",
         )
 
     new_skill = StudentSkill(
@@ -1081,6 +1090,77 @@ async def demo_mode():
             if is_demo
             else f"AI provider '{settings.AI_PROVIDER}' configured"
         ),
+    }
+
+# Supported AI Provider options
+SUPPORTED_AI_PROVIDERS = [
+    {
+        "id": "gemini",
+        "name": "Google Gemini",
+        "badge": "Cloud AI",
+        "description": "Google Cloud Generative AI with state-of-the-art reasoning",
+        "default_model": "gemini-3-flash-preview",
+        "requires_api_key": True,
+        "requires_base_url": False,
+    },
+    {
+        "id": "ollama",
+        "name": "Ollama",
+        "badge": "Local & Private",
+        "description": "Locally hosted open-source LLMs running on localhost:11434",
+        "default_model": "llama3.2",
+        "requires_api_key": False,
+        "requires_base_url": True,
+    },
+    {
+        "id": "compatible",
+        "name": "OpenAI-Compatible",
+        "badge": "Universal API",
+        "description": "Compatible REST inference endpoints (Groq, Together, vLLM)",
+        "default_model": "gpt-4o-mini",
+        "requires_api_key": True,
+        "requires_base_url": True,
+    },
+]
+
+@app.get("/api/ai/providers")
+async def list_ai_providers():
+    """List all supported AI providers."""
+    return {
+        "success": True,
+        "data": {
+            "current_provider": settings.AI_PROVIDER.lower(),
+            "providers": SUPPORTED_AI_PROVIDERS,
+        },
+    }
+
+class AIProviderUpdateRequest(BaseModel):
+    provider: str = Field(..., description="Provider name: gemini, ollama, or compatible")
+
+@app.post("/api/settings/ai-provider")
+async def update_ai_provider(payload: AIProviderUpdateRequest):
+    """Save selected AI provider to backend settings and reconfigure AI service."""
+    raw_provider = payload.provider.strip().lower()
+    valid_ids = [p["id"] for p in SUPPORTED_AI_PROVIDERS]
+
+    if raw_provider not in valid_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported AI provider '{payload.provider}'. Supported options: {', '.join(valid_ids)}",
+        )
+
+    ai_service.set_provider(raw_provider)
+    matched = next((p for p in SUPPORTED_AI_PROVIDERS if p["id"] == raw_provider), None)
+    default_model = matched["default_model"] if matched else "default"
+
+    return {
+        "success": True,
+        "data": {
+            "ai_provider": raw_provider,
+            "ai_model": settings.AI_MODEL or default_model,
+            "is_configured": ai_service.is_configured,
+            "message": f"AI provider successfully updated to '{raw_provider}'",
+        },
     }
 
 if __name__ == "__main__":

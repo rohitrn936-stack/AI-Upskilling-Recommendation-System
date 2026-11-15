@@ -30,7 +30,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _apiKeyStatusMessage;
   bool _apiKeyConfigured = false;
   bool _apiKeyValid = false;
-  String _apiProvider = 'gemini';
 
   @override
   void initState() {
@@ -86,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _apiKeyConfigured = result['configured'] ?? false;
         _apiKeyValid = result['valid'] ?? false;
-        _apiProvider = result['provider'] ?? 'gemini';
+        _aiProvider = result['provider'] ?? 'gemini';
         _apiKeyStatusMessage = result['message'] ?? '';
       });
     } catch (e) {
@@ -102,6 +101,325 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SnackBar(
         content: Text(message),
         backgroundColor: AppColors.primary,
+      ),
+    );
+  }
+
+  static const List<SupportedAIProvider> _supportedProviders = [
+    SupportedAIProvider(
+      id: 'gemini',
+      name: 'Google Gemini',
+      badge: 'Cloud AI',
+      description: 'Google Cloud Gemini generative models (gemini-3-flash-preview)',
+      defaultModel: 'gemini-3-flash-preview',
+      icon: Icons.auto_awesome_rounded,
+      requiresApiKey: true,
+      requiresBaseUrl: false,
+    ),
+    SupportedAIProvider(
+      id: 'ollama',
+      name: 'Ollama',
+      badge: 'Local & Private',
+      description: 'Self-hosted LLMs running on localhost:11434 (llama3.2, mistral)',
+      defaultModel: 'llama3.2',
+      icon: Icons.memory_rounded,
+      requiresApiKey: false,
+      requiresBaseUrl: true,
+    ),
+    SupportedAIProvider(
+      id: 'compatible',
+      name: 'OpenAI-Compatible',
+      badge: 'Universal API',
+      description: 'OpenAI-compatible inference REST API (Groq, Together, vLLM)',
+      defaultModel: 'gpt-4o-mini',
+      icon: Icons.hub_outlined,
+      requiresApiKey: true,
+      requiresBaseUrl: true,
+    ),
+  ];
+
+  SupportedAIProvider get _activeProvider {
+    return _supportedProviders.firstWhere(
+      (p) => p.id.toLowerCase() == _aiProvider.toLowerCase(),
+      orElse: () => SupportedAIProvider(
+        id: _aiProvider,
+        name: _aiProvider.isEmpty ? 'Google Gemini' : _aiProvider.toUpperCase(),
+        badge: 'Active',
+        description: 'Active provider configured on backend',
+        defaultModel: _aiModel,
+        icon: Icons.auto_awesome_rounded,
+        requiresApiKey: true,
+        requiresBaseUrl: false,
+      ),
+    );
+  }
+
+  Future<void> _showProviderSelectionDialog() async {
+    String tempProvider = _aiProvider;
+
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.tune_rounded, color: AppColors.primary, size: 22),
+              SizedBox(width: 10),
+              Text(
+                'Supported AI Providers',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_outline_rounded,
+                        color: AppColors.success,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Currently Active: ${_activeProvider.name} (${_activeProvider.badge})',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Select from the supported AI providers below. Each provider supports distinct models and runtime environments:',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+                if (_statusMessage.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Backend status: $_statusMessage',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textMuted,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                ..._supportedProviders.map((provider) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildProviderSelectionTile(
+                      provider: provider,
+                      current: tempProvider,
+                      isActive: provider.id.toLowerCase() == _aiProvider.toLowerCase(),
+                      onSelect: () => setDialogState(() => tempProvider = provider.id),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(tempProvider),
+              child: const Text('Apply Selection'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (selected != null && selected != _aiProvider) {
+      setState(() => _isLoading = true);
+      try {
+        final res = await APIClient.setAiProvider(selected);
+        final data = res['data'] as Map<String, dynamic>? ?? {};
+        final updatedProvider = (data['ai_provider'] ?? selected).toString();
+        final msg = (data['message'] ??
+                'AI provider updated to ${updatedProvider.toUpperCase()}')
+            .toString();
+
+        await _loadSettings();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(e.toString().replaceFirst('Exception: ', '')),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
+    }
+  }
+
+  Widget _buildProviderSelectionTile({
+    required SupportedAIProvider provider,
+    required String current,
+    required bool isActive,
+    required VoidCallback onSelect,
+  }) {
+    final isSelected = provider.id == current;
+    final badgeColor = provider.id == 'gemini'
+        ? AppColors.primary
+        : provider.id == 'ollama'
+            ? AppColors.success
+            : AppColors.secondary;
+
+    return InkWell(
+      onTap: onSelect,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppColors.primary.withValues(alpha: 0.08)
+              : AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : AppColors.border,
+            width: isSelected ? 1.8 : 1,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                provider.icon,
+                color: isSelected ? AppColors.primary : AppColors.textMuted,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        provider.name,
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          color: isSelected
+                              ? AppColors.primary
+                              : AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      StatusPill(
+                        label: provider.badge,
+                        color: badgeColor,
+                      ),
+                      if (isActive) ...[
+                        const SizedBox(width: 6),
+                        const StatusPill(
+                          label: 'ACTIVE',
+                          color: AppColors.success,
+                          icon: Icons.check_circle_rounded,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    provider.description,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textSecondary,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        'Default: ${provider.defaultModel}',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const Text('•', style: TextStyle(color: AppColors.textMuted)),
+                      Text(
+                        provider.requiresApiKey ? 'Requires API Key' : 'No Key Required',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: provider.requiresApiKey ? AppColors.info : AppColors.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? AppColors.primary : AppColors.border,
+                    width: isSelected ? 6 : 2,
+                  ),
+                  color: isSelected ? Colors.white : Colors.transparent,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -182,7 +500,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildApiSettings() {
-    final providerLabel = _aiProvider.toUpperCase();
+    final active = _activeProvider;
     final modeSubtitle = _demoMode
         ? 'Demo mode active (configured in backend/.env)'
         : 'API key configured on backend';
@@ -211,33 +529,174 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          _buildSettingTile(
-            icon: Icons.flash_on_rounded,
-            title: 'AI Provider',
-            subtitle:
-                '$providerLabel (${_demoMode ? 'demo mode' : 'configured'})',
-            trailing: StatusPill(
-              label: providerLabel,
-              color: _demoMode ? AppColors.primary : AppColors.success,
+          const SizedBox(height: 16),
+          // Active AI Provider Highlight Card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.2),
+                width: 1.2,
+              ),
             ),
-            onTap: () => _showInfo(
-              _statusMessage.isNotEmpty
-                  ? _statusMessage
-                  : 'Configured via backend/.env AI_PROVIDER setting.',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        active.icon,
+                        color: AppColors.primary,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                active.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const StatusPill(
+                                label: 'ACTIVE',
+                                color: AppColors.success,
+                                icon: Icons.check_circle_rounded,
+                              ),
+                              const SizedBox(width: 6),
+                              StatusPill(
+                                label: active.badge,
+                                color: active.id == 'gemini'
+                                    ? AppColors.primary
+                                    : active.id == 'ollama'
+                                        ? AppColors.success
+                                        : AppColors.secondary,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            active.description,
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textSecondary,
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      onPressed: _showProviderSelectionDialog,
+                      icon: const Icon(Icons.tune_rounded, size: 16),
+                      label: const Text('Change Provider'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 6,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.smart_toy_outlined,
+                            size: 15,
+                            color: AppColors.textMuted,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Active Model: $_aiModel',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            active.requiresApiKey
+                                ? Icons.vpn_key_outlined
+                                : Icons.lock_open_rounded,
+                            size: 15,
+                            color: active.requiresApiKey && _demoMode
+                                ? AppColors.warning
+                                : AppColors.success,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            active.requiresApiKey
+                                ? (_demoMode
+                                    ? 'Key Required (Demo Mode)'
+                                    : 'Key Configured')
+                                : 'No API Key Required',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: active.requiresApiKey && _demoMode
+                                  ? AppColors.warning
+                                  : AppColors.success,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const Divider(height: 1),
+          const SizedBox(height: 14),
           _buildSettingTile(
             icon: Icons.vpn_key_outlined,
             title: 'AI API Key Status',
             subtitle: modeSubtitle,
-            onTap: _demoMode
-                ? null
-                : () {
-                    // Show the API key configuration interface
-                    _showApiKeyConfigurationDialog();
-                  },
+            onTap: () => _showInfo(
+              _demoMode
+                  ? 'Demo mode active. To enable live LLM generation, set AI_API_KEY in backend/.env or configure below.'
+                  : 'API key is configured on the backend for $_aiProvider.',
+            ),
           ),
           const Divider(height: 1),
           _buildSettingTile(
@@ -303,8 +762,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // API key input field
                   TextField(
                     controller: TextEditingController()
-                      ..text = _apiKey.isNotEmpty ? '••••••••••' : '',
-                    obscure: !_isKeyVisible,
+                      ..text = _apiKey.isNotEmpty ? _apiKey : '',
+                    obscureText: !_isKeyVisible,
                     obscuringCharacter: '•',
                     enableSuggestions: false,
                     autocorrect: false,
@@ -313,9 +772,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       labelText: 'AI API Key',
                       hintText: 'Enter your AI provider API key',
                       border: const OutlineInputBorder(),
-                      suffixIcon: _isKeyVisible
-                          ? const Icon(Icons.visibility_off_rounded)
-                          : const Icon(Icons.visibility_rounded),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _isKeyVisible
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded,
+                        ),
+                        onPressed: _toggleKeyVisibility,
+                      ),
                       suffixIconConstraints:
                           const BoxConstraints(minWidth: 24, minHeight: 24),
                       contentPadding: const EdgeInsets.symmetric(
@@ -494,7 +958,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
   // Configure the API key via backend
   Future<void> _configureApiKey() async {
     setState(() => _isConfiguring = true);
@@ -526,7 +989,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _apiKeyConfigured = result['configured'] ?? false;
           _apiKeyValid = result['valid'] ?? false;
-          _apiProvider = result['provider'] ?? 'gemini';
+          _aiProvider = result['provider'] ?? 'gemini';
           _apiKeyStatusMessage = result['message'] ?? 'API key configured';
           _apiKey = ''; // Clear the input field after successful save
         });
@@ -550,4 +1013,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _showInfo('Error configuring API key: $e');
     }
   }
+}
+
+class SupportedAIProvider {
+  final String id;
+  final String name;
+  final String badge;
+  final String description;
+  final String defaultModel;
+  final IconData icon;
+  final bool requiresApiKey;
+  final bool requiresBaseUrl;
+
+  const SupportedAIProvider({
+    required this.id,
+    required this.name,
+    required this.badge,
+    required this.description,
+    required this.defaultModel,
+    required this.icon,
+    this.requiresApiKey = false,
+    this.requiresBaseUrl = false,
+  });
 }
