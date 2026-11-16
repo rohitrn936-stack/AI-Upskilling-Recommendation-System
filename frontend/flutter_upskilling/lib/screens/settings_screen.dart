@@ -30,6 +30,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _apiKeyStatusMessage;
   bool _apiKeyConfigured = false;
   bool _apiKeyValid = false;
+  
+  // Notification preferences state
+  bool _emailNotifications = true;
+  bool _pushNotifications = true;
+  bool _learningReminders = true;
 
   @override
   void initState() {
@@ -68,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Fetch API key status
       await _fetchApiKeyStatus();
+      await _loadNotificationPreferences();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
@@ -75,6 +81,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+    Future<void> _loadNotificationPreferences() async {
+    try {
+      final result = await APIClient.getNotificationPreferences();
+      final data = result['data'] as Map<String, dynamic>? ?? {};
+      if (!mounted) return;
+      setState(() {
+        _emailNotifications = data['email_enabled'] != false;
+        _pushNotifications = data['push_enabled'] != false;
+        _learningReminders = data['learning_reminders_enabled'] != false;
+      });
+    } catch (_) {
+      // Keep the defaults if the preferences can't be loaded
+    }
+  }
+
+  Future<void> _saveNotificationPreference({
+    required String key,
+    required bool value,
+    required bool previous,
+    required void Function(bool) apply,
+  }) async {
+    setState(() => apply(value));
+    try {
+      await APIClient.updateNotificationPreferences({key: value});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => apply(previous));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not save notification preference'),
+        ),
+      );
     }
   }
 
@@ -842,8 +883,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
-  Widget _buildGeneralSettings(BuildContext ctx) {
+      Widget _buildGeneralSettings(BuildContext ctx) {
     final isHealthy = _backendStatus.toLowerCase() == 'healthy' ||
         _backendStatus.toLowerCase() == 'ok';
 
@@ -882,6 +922,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const Divider(height: 1),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            secondary: const Icon(
+              Icons.email_outlined,
+              color: AppColors.primary,
+            ),
+            title: const Text('Email notifications'),
+            subtitle: const Text('Receive updates by email'),
+            value: _emailNotifications,
+            onChanged: (v) => _saveNotificationPreference(
+              key: 'email_enabled',
+              value: v,
+              previous: _emailNotifications,
+              apply: (x) => _emailNotifications = x,
+            ),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            secondary: const Icon(
+              Icons.notifications_active_outlined,
+              color: AppColors.primary,
+            ),
+            title: const Text('Push notifications'),
+            subtitle: const Text('Receive alerts on your device'),
+            value: _pushNotifications,
+            onChanged: (v) => _saveNotificationPreference(
+              key: 'push_enabled',
+              value: v,
+              previous: _pushNotifications,
+              apply: (x) => _pushNotifications = x,
+            ),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            secondary: const Icon(
+              Icons.alarm_outlined,
+              color: AppColors.primary,
+            ),
+            title: const Text('Learning reminders'),
+            subtitle: const Text('Reminders to continue your roadmap'),
+            value: _learningReminders,
+            onChanged: (v) => _saveNotificationPreference(
+              key: 'learning_reminders_enabled',
+              value: v,
+              previous: _learningReminders,
+              apply: (x) => _learningReminders = x,
+            ),
+          ),
+          const Divider(height: 1),
           _buildSettingTile(
             icon: Icons.logout_rounded,
             iconColor: AppColors.danger,
@@ -901,7 +992,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
   Widget _buildSettingTile({
     required IconData icon,
     Color iconColor = AppColors.primary,
