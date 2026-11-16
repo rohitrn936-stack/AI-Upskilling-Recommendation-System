@@ -25,6 +25,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    api_key = Column(String, nullable=True, index=True)
 
     # Relationships
     profile = relationship("StudentProfile", uselist=False, back_populates="user")
@@ -32,7 +33,28 @@ class User(Base):
     roadmaps = relationship("LearningRoadmap", back_populates="student")
     progress = relationship("TaskProgress", back_populates="user")
     recommendations = relationship("CareerRecommendation", back_populates="user")
+    notification_preferences = relationship(
+        "NotificationPreference",
+        uselist=False,
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
 
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    email_enabled = Column(Boolean, default=True, nullable=False)
+    push_enabled = Column(Boolean, default=True, nullable=False)
+    learning_reminders_enabled = Column(Boolean, default=True, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="notification_preferences")
 
 class StudentProfile(Base):
     __tablename__ = "student_profiles"

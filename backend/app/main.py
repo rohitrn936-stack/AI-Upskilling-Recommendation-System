@@ -8,6 +8,7 @@ import uvicorn
 from app.database.connection import SessionLocal, engine
 from app.database.models import Base
 from app.core.config import settings
+from app.core.encryption import encrypt_api_key, decrypt_api_key, is_encryption_available
 from app.services.ai.service import AIService
 
 # Initialize AI service
@@ -117,6 +118,21 @@ Base.metadata.create_all(bind=engine)
 # AI endpoints with Pydantic request validation
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
+
+# ============ API KEY CONFIGURATION SCHEMAS ============
+
+class ApiKeyConfigureRequest(BaseModel):
+    """Request to configure or update a user's AI API key."""
+    api_key: str = Field(..., description="The AI provider API key to store")
+    validate: bool = Field(default=True, description="Whether to validate the key with the provider")
+
+class ApiKeyStatusResponse(BaseModel):
+    """Response for API key status check."""
+    success: bool
+    configured: bool
+    valid: bool
+    provider: str
+    message: str
 
 # Request/response schemas for career recommendations
 class CareerRecommendationRequest(BaseModel):
@@ -476,6 +492,221 @@ async def login(
 
     return {"success": True, "data": {"access_token": access_token, "token_type": "bearer"}}
 
+# ============ API KEY CONFIGURATION ENDPOINTS ============
+
+@app.post("/api/ai/api-key", response_model=ApiKeyStatusResponse)
+async def configure_api_key(
+    request: ApiKeyConfigureRequest,
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Configure or update the authenticated user's AI API key.
+
+    The API key is encrypted at rest and stored in the user's database record.
+    If [validate] is true, the key is tested against the configured AI provider.
+    """
+    from app.services.ai.service import AIService
+    from app.services.ai.providers.base import AIProviderError
+
+    user = current_user
+
+    # Encrypt the API key at rest
+    encrypted_key = encrypt_api_key(request.api_key)
+
+    if encrypted_key is None:
+        # Encryption not configured; store with warning
+        user.api_key = request.api_key
+        db.commit()
+        return {
+            "success": True,
+            "configured": True,
+            "valid": False,
+            "provider": settings.AI_PROVIDER,
+            "message": "API key stored without encryption (CRYPTO_KEY not configured). "
+                       "Configure CRYPTO_KEY environment variable for production use.",
+        }
+
+    user.api_key = encrypted_key
+    db.commit()
+
+    # Optionally validate the key
+    if request.validate:
+        try:
+            # Create a temporary provider to validate the key
+            temp_service = AIService()
+            # Override the config with the user's key
+            temp_service.provider = None
+            temp_service._provider_type = settings.AI_PROVIDER.lower()
+            temp_service._config = {
+                "provider": settings.AI_PROVIDER,
+                "model": settings.AI_MODEL,
+                "api_key": request.api_key,
+                "base_url": settings.AI_BASE_URL,
+                "temperature": settings.AI_TEMPERATURE,
+                "timeout": settings.AI_TIMEOUT,
+                "max_retries": settings.AI_MAX_RETRIES,
+            }
+            temp_service._initialize_provider()
+
+            if not temp_service.is_configured:
+                return {
+                    "success": True,
+                    "configured": True,
+                    "valid": False,
+                    "provider": settings.AI_PROVIDER,
+                    "message": "API key stored but validation failed - "
+                               "the key may be invalid or incomplete for the selected provider.",
+                }
+
+            # Perform a quick health check
+            is_healthy = await temp_service.provider.health_check()
+            if not is_healthy:
+                return {
+                    "success": True,
+                    "configured": True,
+                    "valid": False,
+                    "provider": settings.AI_PROVIDER,
+                    "message": "API key stored but health check failed. "
+                               "The key may be invalid or the provider is unavailable.",
+                }
+
+            return {
+                "success": True,
+                "configured": True,
+                "valid": True,
+                "provider": settings.AI_PROVIDER,
+                "message": "API key successfully configured and validated.",
+            }
+        except AIProviderError as e:
+            return {
+                "success": True,
+                "configured": True,
+                "valid": False,
+                "provider": settings.AI_PROVIDER,
+                "message": f"API key stored but validation error: {str(e)}",
+            }
+        except Exception as e:
+            # Log the error but don't expose details
+            import traceback
+            traceback.print_exc()
+            return {
+                "success": True,
+                "configured": True,
+                "valid": False,
+                "provider": settings.AI_PROVIDER,
+                "message": "API key stored but validation encountered an error.",
+            }
+
+    # If validate is false, just mark as configured without validation
+    return {
+        "success": True,
+        "configured": True,
+        "valid": True,
+        "provider": settings.AI_PROVIDER,
+        "message": "API key configured (validation skipped).",
+    }
+
+
+@app.get("/api/ai/api-key-status", response_model=ApiKeyStatusResponse)
+async def get_api_key_status(
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Check the authenticated user's AI API key status.
+
+    Returns whether a key is configured, if it's valid, and the provider.
+    The actual API key is never returned or exposed.
+    """
+    from app.services.ai.service import AIService
+    from app.services.ai.providers.base import AIProviderError
+
+    user = current_user
+
+    # Check if the user has an API key stored
+    has_key = user.api_key is not None and user.api_key != ""
+
+    if not has_key:
+        return {
+            "success": True,
+            "configured": False,
+            "valid": False,
+            "provider": settings.AI_PROVIDER,
+            "message": "No API key configured for this user.",
+        }
+
+    # Decrypt the key for checking
+    encrypted_key = user.api_key
+    if is_encryption_available():
+        from app.core.encryption import decrypt_api_key
+        decrypted_key = decrypt_api_key(encrypted_key)
+    else:
+        decrypted_key = encrypted_key
+
+    # Determine validity by checking the provider
+    try:
+        temp_service = AIService()
+        temp_service.provider = None
+        temp_service._provider_type = settings.AI_PROVIDER.lower()
+        temp_service._config = {
+            "provider": settings.AI_PROVIDER,
+            "model": settings.AI_MODEL,
+            "api_key": decrypted_key or "",
+            "base_url": settings.AI_BASE_URL,
+            "temperature": settings.AI_TEMPERATURE,
+            "timeout": settings.AI_TIMEOUT,
+            "max_retries": settings.AI_MAX_RETRIES,
+        }
+        temp_service._initialize_provider()
+
+        if not temp_service.is_configured:
+            return {
+                "success": True,
+                "configured": True,
+                "valid": False,
+                "provider": settings.AI_PROVIDER,
+                "message": "API key is configured but validation failed - "
+                           "the key may be invalid or incomplete for the selected provider.",
+            }
+
+        # Perform health check
+        is_healthy = await temp_service.provider.health_check()
+        if not is_healthy:
+            return {
+                "success": True,
+                "configured": True,
+                "valid": False,
+                "provider": settings.AI_PROVIDER,
+                "message": "API key is configured but health check failed. "
+                           "The provider may be unavailable or the key is invalid.",
+            }
+
+        return {
+            "success": True,
+            "configured": True,
+            "valid": True,
+            "provider": settings.AI_PROVIDER,
+            "message": "API key is configured and validated.",
+        }
+    except AIProviderError as e:
+        return {
+            "success": True,
+            "configured": True,
+            "valid": False,
+            "provider": settings.AI_PROVIDER,
+            "message": "API key is configured but validation error: " + str(e),
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": True,
+            "configured": True,
+            "valid": False,
+            "provider": settings.AI_PROVIDER,
+            "message": "API key status check encountered an error.",
+        }
+
+
 # ============ PROTECTED ENDPOINTS ============
 
 # Profile schemas
@@ -608,13 +839,22 @@ async def add_skill(
     from app.database.models import StudentSkill
 
     skill_name = skill_data.get("skill_name", "") if isinstance(skill_data, dict) else ""
-    proficiency_level = skill_data.get("proficiency_level", "beginner") if isinstance(skill_data, dict) else "beginner"
+    raw_level = skill_data.get("proficiency_level", "beginner") if isinstance(skill_data, dict) else "beginner"
+    proficiency_level = (raw_level or "beginner").strip().lower()
     category = skill_data.get("category", "") if isinstance(skill_data, dict) else ""
 
     if not skill_name:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="skill_name is required",
+        )
+
+    # Validate allowed proficiency levels (case-insensitive)
+    valid_proficiencies = ["beginner", "intermediate", "advanced", "expert"]
+    if proficiency_level not in valid_proficiencies:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid proficiency level '{raw_level}'. Allowed values: {', '.join(valid_proficiencies)}",
         )
 
     new_skill = StudentSkill(
@@ -851,6 +1091,145 @@ async def demo_mode():
             else f"AI provider '{settings.AI_PROVIDER}' configured"
         ),
     }
+
+# Supported AI Provider options
+SUPPORTED_AI_PROVIDERS = [
+    {
+        "id": "gemini",
+        "name": "Google Gemini",
+        "badge": "Cloud AI",
+        "description": "Google Cloud Generative AI with state-of-the-art reasoning",
+        "default_model": "gemini-3-flash-preview",
+        "requires_api_key": True,
+        "requires_base_url": False,
+    },
+    {
+        "id": "ollama",
+        "name": "Ollama",
+        "badge": "Local & Private",
+        "description": "Locally hosted open-source LLMs running on localhost:11434",
+        "default_model": "llama3.2",
+        "requires_api_key": False,
+        "requires_base_url": True,
+    },
+    {
+        "id": "compatible",
+        "name": "OpenAI-Compatible",
+        "badge": "Universal API",
+        "description": "Compatible REST inference endpoints (Groq, Together, vLLM)",
+        "default_model": "gpt-4o-mini",
+        "requires_api_key": True,
+        "requires_base_url": True,
+    },
+]
+
+@app.get("/api/ai/providers")
+async def list_ai_providers():
+    """List all supported AI providers."""
+    return {
+        "success": True,
+        "data": {
+            "current_provider": settings.AI_PROVIDER.lower(),
+            "providers": SUPPORTED_AI_PROVIDERS,
+        },
+    }
+
+class AIProviderUpdateRequest(BaseModel):
+    provider: str = Field(..., description="Provider name: gemini, ollama, or compatible")
+
+@app.post("/api/settings/ai-provider")
+async def update_ai_provider(payload: AIProviderUpdateRequest):
+    """Save selected AI provider to backend settings and reconfigure AI service."""
+    raw_provider = payload.provider.strip().lower()
+    valid_ids = [p["id"] for p in SUPPORTED_AI_PROVIDERS]
+
+    if raw_provider not in valid_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported AI provider '{payload.provider}'. Supported options: {', '.join(valid_ids)}",
+        )
+
+    ai_service.set_provider(raw_provider)
+    matched = next((p for p in SUPPORTED_AI_PROVIDERS if p["id"] == raw_provider), None)
+    default_model = matched["default_model"] if matched else "default"
+
+    return {
+        "success": True,
+        "data": {
+            "ai_provider": raw_provider,
+            "ai_model": settings.AI_MODEL or default_model,
+            "is_configured": ai_service.is_configured,
+            "message": f"AI provider successfully updated to '{raw_provider}'",
+        },
+    }
+class NotificationPreferencesRequest(BaseModel):
+    email_enabled: bool | None = None
+    push_enabled: bool | None = None
+    learning_reminders_enabled: bool | None = None
+
+
+def _notification_prefs_response(prefs):
+    return {
+        "email_enabled": prefs.email_enabled,
+        "push_enabled": prefs.push_enabled,
+        "learning_reminders_enabled": prefs.learning_reminders_enabled,
+    }
+
+
+@app.get("/api/settings/notifications")
+async def get_notification_preferences(
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Get the current user's notification preferences."""
+    from app.database.models import NotificationPreference
+
+    prefs = (
+        db.query(NotificationPreference)
+        .filter(NotificationPreference.user_id == current_user.id)
+        .first()
+    )
+    if not prefs:
+        # No saved choices yet, so return the defaults (all on)
+        return {
+            "success": True,
+            "data": {
+                "email_enabled": True,
+                "push_enabled": True,
+                "learning_reminders_enabled": True,
+            },
+        }
+    return {"success": True, "data": _notification_prefs_response(prefs)}
+
+
+@app.put("/api/settings/notifications")
+async def update_notification_preferences(
+    payload: NotificationPreferencesRequest,
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Save the current user's notification preferences."""
+    from app.database.models import NotificationPreference
+
+    prefs = (
+        db.query(NotificationPreference)
+        .filter(NotificationPreference.user_id == current_user.id)
+        .first()
+    )
+    if not prefs:
+        prefs = NotificationPreference(user_id=current_user.id)
+        db.add(prefs)
+
+    if payload.email_enabled is not None:
+        prefs.email_enabled = payload.email_enabled
+    if payload.push_enabled is not None:
+        prefs.push_enabled = payload.push_enabled
+    if payload.learning_reminders_enabled is not None:
+        prefs.learning_reminders_enabled = payload.learning_reminders_enabled
+
+    db.commit()
+    db.refresh(prefs)
+    return {"success": True, "data": _notification_prefs_response(prefs)}
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
