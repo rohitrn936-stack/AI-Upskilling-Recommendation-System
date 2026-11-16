@@ -1,11 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:upskilling/services/api_client.dart';
 
 void main() {
-  final mockClient = MockClient((request) async {
-    final uri = Uri.parse(request.url.toString());
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
 
     // Register endpoint - expects form data
     if (request.url.path == '/api/auth/register' && request.method == 'POST') {

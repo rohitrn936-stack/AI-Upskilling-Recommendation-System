@@ -24,6 +24,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _backendStatus = 'healthy';
   String _statusMessage = '';
 
+  static const Map<String, List<String>> _aiModelsByProvider = {
+    'gemini': ['gemini-pro', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+    'ollama': ['llama3', 'mistral', 'codellama'],
+    'compatible': ['gpt-3.5-turbo', 'gpt-4', 'claude-3-haiku'],
+  };
+
   // API key configuration state
   bool _isConfiguring = false;
   String _apiKey = '';
@@ -759,78 +765,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAiProviderDropdown() {
-    final providerLabel = _aiProvider.toUpperCase();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'AI Provider',
-            style: TextStyle(
-              fontSize: 14.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: _aiProvider,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.surface,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.border),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.primary),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 14,
-              ),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'gemini', child: Text('Gemini')),
-              DropdownMenuItem(value: 'ollama', child: Text('Ollama')),
-              DropdownMenuItem(
-                  value: 'compatible', child: Text('Compatible')),
-            ],
-            onChanged: (value) async {
-              if (value == null) return;
-              await APIClient.saveAiProvider(value);
-              final models = _aiModelsByProvider[value] ?? [];
-              final newModel = models.isNotEmpty ? models.first : _aiModel;
-              await APIClient.saveAiModel(newModel);
-              if (!mounted) return;
-              setState(() {
-                _aiProvider = value;
-                _aiModel = newModel;
-                _hasSavedSelection = true;
-              });
-            },
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '$providerLabel ${_demoMode ? '(demo mode)' : '(configured)'}. Saved to device.',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAiModelDropdown() {
+    final currentProvider = _aiProvider.toLowerCase();
+    final models = _aiModelsByProvider[currentProvider] ??
+        _aiModelsByProvider['gemini'] ??
+        ['gemini-pro'];
+    final effectiveModel = models.contains(_aiModel) ? _aiModel : models.first;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -847,7 +788,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             key: ValueKey('model_dropdown_$_aiProvider'),
-            initialValue: _aiModel,
+            initialValue: effectiveModel,
             decoration: InputDecoration(
               filled: true,
               fillColor: AppColors.surface,
@@ -868,7 +809,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 vertical: 14,
               ),
             ),
-            items: _aiModelsByProvider[_aiProvider]!
+            items: models
                 .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                 .toList(),
             onChanged: (value) async {
@@ -883,7 +824,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Active model: $_aiModel${_hasSavedSelection ? ' (saved)' : ' (from backend)'}.',
+            'Active model: $effectiveModel${_hasSavedSelection ? ' (saved)' : ' (from backend)'}.',
             style: const TextStyle(
               fontSize: 12,
               color: AppColors.textSecondary,
