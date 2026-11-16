@@ -72,12 +72,16 @@ The system will be developed as a web-based application.
 
 The application will consist of the following main components:
 
-- Frontend user interface.
-- Backend application.
-- Database.
-- Machine learning model.
+- Frontend user interface (Flutter Web & Desktop).
+- Backend application (FastAPI REST API & Uvicorn).
+- Relational Database (SQLAlchemy with SQLite/PostgreSQL).
+- Machine learning and Multi-AI Provider Service (Gemini, Ollama, OpenAI-Compatible).
 - Skill gap analysis module.
-- Learning roadmap module.
+- Learning roadmap generation and progress tracking modules.
+
+For the comprehensive technical specification and interactive diagrams, see [Software Architecture Specification](ARCHITECTURE.md).
+
+![System Architecture Diagram](architecture_diagram.svg)
 
 The overall system flow is:
 

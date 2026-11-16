@@ -1,0 +1,290 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 940" width="1200" height="940" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#1E293B" />
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="50%" stop-color="#7C3AED" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+    <linearGradient id="flutterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284C7" />
+      <stop offset="100%" stop-color="#0369A1" />
+    </linearGradient>
+    <linearGradient id="fastapiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7C3AED" />
+      <stop offset="100%" stop-color="#6D28D9" />
+    </linearGradient>
+    <linearGradient id="dbGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#B45309" />
+    </linearGradient>
+    
+    <!-- Shadows -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+    <filter id="cardShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.25" />
+    </filter>
+
+    <!-- Markers for arrows -->
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#94A3B8" />
+    </marker>
+    <marker id="arrowPrimary" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#6366F1" />
+    </marker>
+    <marker id="arrowSuccess" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#10B981" />
+    </marker>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="1200" height="940" fill="url(#bgGrad)" rx="16" />
+
+  <!-- Top Banner / Title -->
+  <rect x="30" y="24" width="1140" height="74" fill="url(#headerGrad)" rx="12" filter="url(#shadow)" />
+  <text x="50" y="58" fill="#FFFFFF" font-size="22" font-weight="800" letter-spacing="-0.3">AI-Powered Upskilling Recommendation and Automation System</text>
+  <text x="50" y="82" fill="#E0E7FF" font-size="13.5" font-weight="500">System Architecture Specification • Project #22 • Team 28 (CODEVERSE) • PES University</text>
+  <rect x="1000" y="44" width="150" height="32" rx="16" fill="#1E1B4B" fill-opacity="0.6" stroke="#A5B4FC" stroke-width="1.2" />
+  <text x="1075" y="65" text-anchor="middle" fill="#EEF2FF" font-size="12" font-weight="700">Full-Stack Modular</text>
+
+  <!-- ========================================================================= -->
+  <!-- LAYER 1: CLIENT PRESENTATION LAYER (FLUTTER)                              -->
+  <!-- ========================================================================= -->
+  <g transform="translate(30, 118)">
+    <rect width="1140" height="152" fill="#1E293B" rx="12" stroke="#334155" stroke-width="1.5" filter="url(#shadow)" />
+    <!-- Layer Header -->
+    <rect x="0" y="0" width="220" height="32" fill="url(#flutterGrad)" rx="12" />
+    <rect x="200" y="0" width="20" height="32" fill="url(#flutterGrad)" />
+    <text x="14" y="21" fill="#FFFFFF" font-size="13" font-weight="700">1. PRESENTATION LAYER</text>
+    <text x="235" y="21" fill="#38BDF8" font-size="12" font-weight="600">Flutter 3.x (Web / Desktop) • GoRouter Navigation • Material 3 AppTheme</text>
+
+    <!-- Component Cards in Presentation -->
+    <!-- Card 1.1: Authentication -->
+    <rect x="18" y="44" width="170" height="92" rx="8" fill="#0F172A" stroke="#38BDF8" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="28" y="65" fill="#38BDF8" font-size="13" font-weight="700">Auth &amp; Session</text>
+    <text x="28" y="85" fill="#94A3B8" font-size="11">• LoginScreen</text>
+    <text x="28" y="103" fill="#94A3B8" font-size="11">• RegisterScreen</text>
+    <text x="28" y="121" fill="#94A3B8" font-size="11">• Token Persistence</text>
+
+    <!-- Card 1.2: Student Profile -->
+    <rect x="202" y="44" width="170" height="92" rx="8" fill="#0F172A" stroke="#38BDF8" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="212" y="65" fill="#38BDF8" font-size="13" font-weight="700">Student Profile</text>
+    <text x="212" y="85" fill="#94A3B8" font-size="11">• ProfileScreen</text>
+    <text x="212" y="103" fill="#94A3B8" font-size="11">• OnboardingScreen</text>
+    <text x="212" y="121" fill="#94A3B8" font-size="11">• Degree &amp; Year State</text>
+
+    <!-- Card 1.3: Skills Management -->
+    <rect x="386" y="44" width="175" height="92" rx="8" fill="#0F172A" stroke="#38BDF8" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="396" y="65" fill="#38BDF8" font-size="13" font-weight="700">Skills Portfolio</text>
+    <text x="396" y="85" fill="#94A3B8" font-size="11">• SkillManagementScreen</text>
+    <text x="396" y="103" fill="#94A3B8" font-size="11">• Proficiency Dialog</text>
+    <text x="396" y="121" fill="#94A3B8" font-size="11">• Category Taxonomy</text>
+
+    <!-- Card 1.4: AI Recommendations & Gap -->
+    <rect x="575" y="44" width="185" height="92" rx="8" fill="#0F172A" stroke="#818CF8" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="585" y="65" fill="#818CF8" font-size="13" font-weight="700">AI Recommendations</text>
+    <text x="585" y="85" fill="#94A3B8" font-size="11">• CareerRecommendations</text>
+    <text x="585" y="103" fill="#94A3B8" font-size="11">• SkillGapAnalysisScreen</text>
+    <text x="585" y="121" fill="#94A3B8" font-size="11">• Match Score Badges</text>
+
+    <!-- Card 1.5: Roadmap & Tracking -->
+    <rect x="774" y="44" width="175" height="92" rx="8" fill="#0F172A" stroke="#34D399" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="784" y="65" fill="#34D399" font-size="13" font-weight="700">Roadmap &amp; Progress</text>
+    <text x="784" y="85" fill="#94A3B8" font-size="11">• LearningRoadmapScreen</text>
+    <text x="784" y="103" fill="#94A3B8" font-size="11">• ProgressTrackingScreen</text>
+    <text x="784" y="121" fill="#94A3B8" font-size="11">• Task Completion State</text>
+
+    <!-- Card 1.6: AI Provider & Settings -->
+    <rect x="963" y="44" width="160" height="92" rx="8" fill="#0F172A" stroke="#C084FC" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="973" y="65" fill="#C084FC" font-size="13" font-weight="700">Settings &amp; AI Config</text>
+    <text x="973" y="85" fill="#94A3B8" font-size="11">• SettingsScreen</text>
+    <text x="973" y="103" fill="#94A3B8" font-size="11">• Provider Modal (M1)</text>
+    <text x="973" y="121" fill="#94A3B8" font-size="11">• Key Security (M3)</text>
+  </g>
+
+  <!-- Flow Connector: Presentation -> API -->
+  <path d="M 600 270 L 600 300" stroke="#6366F1" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#arrowPrimary)" />
+  <rect x="490" y="275" width="220" height="22" rx="6" fill="#1E1B4B" stroke="#6366F1" stroke-width="1" />
+  <text x="600" y="290" text-anchor="middle" fill="#A5B4FC" font-size="11" font-weight="700">REST API • JSON over HTTP • JWT Bearer</text>
+
+  <!-- ========================================================================= -->
+  <!-- LAYER 2: BACKEND CONTROLLER & ROUTING LAYER (FASTAPI)                     -->
+  <!-- ========================================================================= -->
+  <g transform="translate(30, 310)">
+    <rect width="1140" height="156" fill="#1E293B" rx="12" stroke="#334155" stroke-width="1.5" filter="url(#shadow)" />
+    <!-- Layer Header -->
+    <rect x="0" y="0" width="220" height="32" fill="url(#fastapiGrad)" rx="12" />
+    <rect x="200" y="0" width="20" height="32" fill="url(#fastapiGrad)" />
+    <text x="14" y="21" fill="#FFFFFF" font-size="13" font-weight="700">2. CONTROLLER / API LAYER</text>
+    <text x="235" y="21" fill="#34D399" font-size="12" font-weight="600">FastAPI 0.115+ • Uvicorn ASGI • Pydantic Schema Validation • OAuth2 Auth Guard</text>
+
+    <!-- Routers / Endpoints Grid -->
+    <!-- Router 2.1: Auth & User Security -->
+    <rect x="18" y="44" width="210" height="96" rx="8" fill="#0F172A" stroke="#10B981" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="28" y="65" fill="#10B981" font-size="12.5" font-weight="700">Auth &amp; User Gateways</text>
+    <text x="28" y="84" fill="#E2E8F0" font-size="10.5" font-family="monospace">POST /api/auth/register</text>
+    <text x="28" y="100" fill="#E2E8F0" font-size="10.5" font-family="monospace">POST /api/auth/login (JWT)</text>
+    <text x="28" y="116" fill="#94A3B8" font-size="10">• BCrypt Hashing • OAuth2 Scheme</text>
+    <text x="28" y="130" fill="#94A3B8" font-size="10">• CORS Middleware &amp; Preflights</text>
+
+    <!-- Router 2.2: Profile & Skills Controller -->
+    <rect x="242" y="44" width="210" height="96" rx="8" fill="#0F172A" stroke="#10B981" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="252" y="65" fill="#10B981" font-size="12.5" font-weight="700">Student &amp; Skills APIs</text>
+    <text x="252" y="84" fill="#E2E8F0" font-size="10.5" font-family="monospace">GET/PUT /api/profile</text>
+    <text x="252" y="100" fill="#E2E8F0" font-size="10.5" font-family="monospace">GET/POST /api/skills</text>
+    <text x="252" y="116" fill="#E2E8F0" font-size="10.5" font-family="monospace">PUT/DELETE /api/skills/{id}</text>
+    <text x="252" y="130" fill="#94A3B8" font-size="10">• Case-Insensitive Validation</text>
+
+    <!-- Router 2.3: Career & Gap Engine -->
+    <rect x="466" y="44" width="220" height="96" rx="8" fill="#0F172A" stroke="#818CF8" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="476" y="65" fill="#818CF8" font-size="12.5" font-weight="700">Career &amp; Gap APIs</text>
+    <text x="476" y="84" fill="#E2E8F0" font-size="10.5" font-family="monospace">POST /api/recommendations</text>
+    <text x="476" y="100" fill="#E2E8F0" font-size="10.5" font-family="monospace">GET /api/careers/{id}/gap</text>
+    <text x="476" y="116" fill="#E2E8F0" font-size="10.5" font-family="monospace">POST /api/personalized-skills</text>
+    <text x="476" y="130" fill="#94A3B8" font-size="10">• Skill Overlap &amp; Deficit Math</text>
+
+    <!-- Router 2.4: Roadmap & Progress -->
+    <rect x="700" y="44" width="210" height="96" rx="8" fill="#0F172A" stroke="#34D399" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="710" y="65" fill="#34D399" font-size="12.5" font-weight="700">Roadmap &amp; Progress APIs</text>
+    <text x="710" y="84" fill="#E2E8F0" font-size="10.5" font-family="monospace">POST /api/roadmaps</text>
+    <text x="710" y="100" fill="#E2E8F0" font-size="10.5" font-family="monospace">GET /api/roadmaps/{id}</text>
+    <text x="710" y="116" fill="#E2E8F0" font-size="10.5" font-family="monospace">PUT /api/roadmaps/items/.../progress</text>
+    <text x="710" y="130" fill="#94A3B8" font-size="10">• Sequential Milestone Generation</text>
+
+    <!-- Router 2.5: AI Provider & Settings -->
+    <rect x="924" y="44" width="200" height="96" rx="8" fill="#0F172A" stroke="#C084FC" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="934" y="65" fill="#C084FC" font-size="12.5" font-weight="700">AI Platform Control</text>
+    <text x="934" y="84" fill="#E2E8F0" font-size="10.5" font-family="monospace">GET /api/ai/providers (M1)</text>
+    <text x="934" y="100" fill="#E2E8F0" font-size="10.5" font-family="monospace">POST /api/settings/ai-provider (M1)</text>
+    <text x="934" y="116" fill="#E2E8F0" font-size="10.5" font-family="monospace">POST /api/ai/api-key (M3)</text>
+    <text x="934" y="130" fill="#94A3B8" font-size="10">• GET /api/demo-mode • /health</text>
+  </g>
+
+  <!-- Flow Connectors: Controller -> AI Subsystem & Data Layer -->
+  <path d="M 350 466 L 350 512" stroke="#10B981" stroke-width="2" marker-end="url(#arrowSuccess)" />
+  <path d="M 850 466 L 850 512" stroke="#818CF8" stroke-width="2" marker-end="url(#arrowPrimary)" />
+
+  <!-- ========================================================================= -->
+  <!-- LAYER 3: CORE APPLICATION & AI INTELLIGENCE SUBSYSTEM                     -->
+  <!-- ========================================================================= -->
+  <g transform="translate(30, 514)">
+    <rect width="1140" height="178" fill="#1E293B" rx="12" stroke="#334155" stroke-width="1.5" filter="url(#shadow)" />
+    <!-- Layer Header -->
+    <rect x="0" y="0" width="240" height="32" fill="url(#aiGrad)" rx="12" />
+    <rect x="220" y="0" width="20" height="32" fill="url(#aiGrad)" />
+    <text x="14" y="21" fill="#FFFFFF" font-size="13" font-weight="700">3. AI &amp; BUSINESS LOGIC LAYER</text>
+    <text x="255" y="21" fill="#C084FC" font-size="12" font-weight="600">AIService Strategy Pattern • Multi-Provider Model Execution • Fernet Encryption Engine</text>
+
+    <!-- AIService Core Card -->
+    <rect x="18" y="44" width="310" height="118" rx="8" fill="#0F172A" stroke="#A855F7" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="30" y="66" fill="#C084FC" font-size="13.5" font-weight="700">AIService Orchestrator</text>
+    <text x="30" y="86" fill="#E2E8F0" font-size="11.5">• Dynamic Provider Lifecycle Management</text>
+    <text x="30" y="104" fill="#E2E8F0" font-size="11.5">• Structured Prompt Formatting &amp; JSON Parsing</text>
+    <text x="30" y="122" fill="#E2E8F0" font-size="11.5">• Resilient Graceful Degradation &amp; Fallbacks</text>
+    <text x="30" y="140" fill="#34D399" font-size="11.5" font-weight="600">✓ Member 1 Multi-Provider Selection Integrated</text>
+
+    <!-- AI Providers Strategy Box -->
+    <rect x="342" y="44" width="460" height="118" rx="8" fill="#0F172A" stroke="#818CF8" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="354" y="66" fill="#818CF8" font-size="13.5" font-weight="700">Supported AI Provider Implementations (BaseAIProvider)</text>
+    
+    <!-- Sub-Provider 1: Gemini -->
+    <rect x="354" y="76" width="138" height="74" rx="6" fill="#1E293B" stroke="#6366F1" stroke-width="1" />
+    <text x="362" y="94" fill="#A5B4FC" font-size="11.5" font-weight="700">Google Gemini</text>
+    <text x="362" y="110" fill="#94A3B8" font-size="10">• Cloud Generative AI</text>
+    <text x="362" y="124" fill="#94A3B8" font-size="10">• gemini-3-flash</text>
+    <text x="362" y="138" fill="#FBBF24" font-size="9.5">Requires API Key</text>
+
+    <!-- Sub-Provider 2: Ollama -->
+    <rect x="502" y="76" width="140" height="74" rx="6" fill="#1E293B" stroke="#10B981" stroke-width="1" />
+    <text x="510" y="94" fill="#6EE7B7" font-size="11.5" font-weight="700">Ollama Local LLM</text>
+    <text x="510" y="110" fill="#94A3B8" font-size="10">• Private Localhost:11434</text>
+    <text x="510" y="124" fill="#94A3B8" font-size="10">• llama3.2 / mistral</text>
+    <text x="510" y="138" fill="#34D399" font-size="9.5">No Key Required</text>
+
+    <!-- Sub-Provider 3: Compatible -->
+    <rect x="652" y="76" width="138" height="74" rx="6" fill="#1E293B" stroke="#F43F5E" stroke-width="1" />
+    <text x="660" y="94" fill="#FDA4AF" font-size="11.5" font-weight="700">OpenAI-Compatible</text>
+    <text x="660" y="110" fill="#94A3B8" font-size="10">• Universal REST API</text>
+    <text x="660" y="124" fill="#94A3B8" font-size="10">• Groq, Together, vLLM</text>
+    <text x="660" y="138" fill="#FBBF24" font-size="9.5">Flexible Base URL</text>
+
+    <!-- Security & Fallback Box -->
+    <rect x="816" y="44" width="308" height="118" rx="8" fill="#0F172A" stroke="#10B981" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="828" y="66" fill="#34D399" font-size="13.5" font-weight="700">Security &amp; Deterministic Engine</text>
+    <text x="828" y="86" fill="#E2E8F0" font-size="11.5">• <tspan font-weight="600" fill="#6EE7B7">Fernet AES-256</tspan> Rest-Encryption for Keys (M3)</text>
+    <text x="828" y="104" fill="#E2E8F0" font-size="11.5">• Zero Plaintext Leakage to Client Storage</text>
+    <text x="828" y="122" fill="#E2E8F0" font-size="11.5">• Offline Fallback Engine (TF-IDF &amp; Similarity)</text>
+    <text x="828" y="140" fill="#94A3B8" font-size="11">• Guaranteed Continuous Demo Execution</text>
+  </g>
+
+  <!-- Flow Connector: Service -> Database Layer -->
+  <path d="M 600 692 L 600 722" stroke="#F59E0B" stroke-width="2" marker-end="url(#arrow)" />
+  <rect x="495" y="698" width="210" height="20" rx="6" fill="#451A03" stroke="#F59E0B" stroke-width="1" />
+  <text x="600" y="712" text-anchor="middle" fill="#FDE68A" font-size="11" font-weight="700">SQLAlchemy ORM 2.0 • Auto-Migrate</text>
+
+  <!-- ========================================================================= -->
+  <!-- LAYER 4: DATA PERSISTENCE & STORAGE LAYER (SQLITE / POSTGRESQL)           -->
+  <!-- ========================================================================= -->
+  <g transform="translate(30, 726)">
+    <rect width="1140" height="178" fill="#1E293B" rx="12" stroke="#334155" stroke-width="1.5" filter="url(#shadow)" />
+    <!-- Layer Header -->
+    <rect x="0" y="0" width="220" height="32" fill="url(#dbGrad)" rx="12" />
+    <rect x="200" y="0" width="20" height="32" fill="url(#dbGrad)" />
+    <text x="14" y="21" fill="#FFFFFF" font-size="13" font-weight="700">4. DATA PERSISTENCE LAYER</text>
+    <text x="235" y="21" fill="#FBBF24" font-size="12" font-weight="600">Relational Database • SQLite (Dev) / PostgreSQL (Prod) • Alembic Versioning</text>
+
+    <!-- Schema Entities -->
+    <!-- Table Group 1: Users & Identity -->
+    <rect x="18" y="44" width="210" height="118" rx="8" fill="#0F172A" stroke="#F59E0B" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="28" y="65" fill="#F59E0B" font-size="13" font-weight="700">Identity &amp; Profile</text>
+    <text x="28" y="84" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">users</tspan> (id, email, password, api_key)</text>
+    <text x="28" y="102" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">student_profiles</tspan></text>
+    <text x="36" y="118" fill="#94A3B8" font-size="10.5">(degree, grad_year, bio, target_role)</text>
+    <text x="28" y="136" fill="#34D399" font-size="10.5">✓ Auto-migration hook enabled</text>
+
+    <!-- Table Group 2: Skills Taxonomy -->
+    <rect x="242" y="44" width="210" height="118" rx="8" fill="#0F172A" stroke="#F59E0B" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="252" y="65" fill="#F59E0B" font-size="13" font-weight="700">Skills Portfolio</text>
+    <text x="252" y="84" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">skills</tspan> (id, name, category)</text>
+    <text x="252" y="102" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">student_skills</tspan></text>
+    <text x="260" y="118" fill="#94A3B8" font-size="10.5">(user_id, skill_id, proficiency)</text>
+    <text x="252" y="136" fill="#94A3B8" font-size="10.5">• Beginner / Inter / Advanced</text>
+
+    <!-- Table Group 3: Career Catalog -->
+    <rect x="466" y="44" width="210" height="118" rx="8" fill="#0F172A" stroke="#F59E0B" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="476" y="65" fill="#F59E0B" font-size="13" font-weight="700">Career Competencies</text>
+    <text x="476" y="84" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">careers</tspan> (id, title, description)</text>
+    <text x="476" y="102" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">career_skills</tspan></text>
+    <text x="484" y="118" fill="#94A3B8" font-size="10.5">(career_id, skill_id, required_level)</text>
+    <text x="476" y="136" fill="#94A3B8" font-size="10.5">• Benchmark competency matrix</text>
+
+    <!-- Table Group 4: Recommendations -->
+    <rect x="690" y="44" width="210" height="118" rx="8" fill="#0F172A" stroke="#F59E0B" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="700" y="65" fill="#F59E0B" font-size="13" font-weight="700">AI Recommendations</text>
+    <text x="700" y="84" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">career_recommendations</tspan></text>
+    <text x="708" y="102" fill="#94A3B8" font-size="10.5">(user_id, career_id, match_score,</text>
+    <text x="708" y="118" fill="#94A3B8" font-size="10.5">reasoning, provider, created_at)</text>
+    <text x="700" y="136" fill="#94A3B8" font-size="10.5">• Historical recommendation logs</text>
+
+    <!-- Table Group 5: Roadmaps & Progress -->
+    <rect x="914" y="44" width="210" height="118" rx="8" fill="#0F172A" stroke="#F59E0B" stroke-width="1.2" filter="url(#cardShadow)" />
+    <text x="924" y="65" fill="#F59E0B" font-size="13" font-weight="700">Roadmap &amp; Progress</text>
+    <text x="924" y="84" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">learning_roadmaps</tspan></text>
+    <text x="924" y="102" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">roadmap_items</tspan> &amp; resources</text>
+    <text x="924" y="120" fill="#E2E8F0" font-size="11">• <tspan font-weight="600">task_progress</tspan> (status, notes)</text>
+    <text x="924" y="136" fill="#34D399" font-size="10.5">✓ Dynamic progress % calculation</text>
+  </g>
+
+  <!-- Footer Metadata -->
+  <text x="600" y="924" text-anchor="middle" fill="#64748B" font-size="11">Architecture Specification • Designed for PES University Sem 5 Software Engineering Coursework • Team 28 CODEVERSE</text>
+</svg>

@@ -113,6 +113,15 @@ app.add_middleware(
 # Ensure database tables exist on startup
 Base.metadata.create_all(bind=engine)
 
+# Ensure schema migrations for existing databases
+from sqlalchemy import text
+with engine.connect() as _conn:
+    try:
+        _conn.execute(text("ALTER TABLE users ADD COLUMN api_key VARCHAR"))
+        _conn.commit()
+    except Exception:
+        pass
+
 # Now define Pydantic schemas and routes...
 
 # AI endpoints with Pydantic request validation
