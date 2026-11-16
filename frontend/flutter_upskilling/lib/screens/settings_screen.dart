@@ -19,6 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _demoMode = true;
   String _aiProvider = 'gemini';
   String _aiModel = 'gemini-pro';
+  bool _hasSavedSelection = false;
   String _environment = 'development';
   String _backendStatus = 'healthy';
   String _statusMessage = '';
@@ -30,6 +31,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _apiKeyStatusMessage;
   bool _apiKeyConfigured = false;
   bool _apiKeyValid = false;
+  
+  // Notification preferences state
+  bool _emailNotifications = true;
+  bool _pushNotifications = true;
+  bool _learningReminders = true;
 
   @override
   void initState() {
@@ -44,6 +50,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
+      // Load saved selection first, fall back to backend-reported config
+      final savedProvider = await APIClient.getSavedAiProvider();
+      final savedModel = await APIClient.getSavedAiModel();
+      final hasSaved = savedProvider != null && savedModel != null;
+
       final results = await Future.wait([
         APIClient.getDemoMode(),
         APIClient.getHealth(),
@@ -55,11 +66,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _demoMode = demoData['demo_mode'] == true;
-        _aiProvider = (demoData['ai_provider'] ??
-                healthData['ai_provider'] ??
-                'gemini')
-            .toString();
-        _aiModel = (demoData['ai_model'] ?? 'gemini-pro').toString();
+        if (hasSaved) {
+          _aiProvider = savedProvider;
+          _aiModel = savedModel;
+          _hasSavedSelection = true;
+        } else {
+          _aiProvider = (demoData['ai_provider'] ??
+                  healthData['ai_provider'] ??
+                  'gemini')
+              .toString();
+          _aiModel = (demoData['ai_model'] ?? 'gemini-pro').toString();
+          _hasSavedSelection = false;
+        }
         _statusMessage = (demoData['message'] ?? '').toString();
         _environment =
             (healthData['environment'] ?? 'development').toString();
@@ -68,6 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       // Fetch API key status
       await _fetchApiKeyStatus();
+      await _loadNotificationPreferences();
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
@@ -75,6 +94,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+    Future<void> _loadNotificationPreferences() async {
+    try {
+      final result = await APIClient.getNotificationPreferences();
+      final data = result['data'] as Map<String, dynamic>? ?? {};
+      if (!mounted) return;
+      setState(() {
+        _emailNotifications = data['email_enabled'] != false;
+        _pushNotifications = data['push_enabled'] != false;
+        _learningReminders = data['learning_reminders_enabled'] != false;
+      });
+    } catch (_) {
+      // Keep the defaults if the preferences can't be loaded
+    }
+  }
+
+  Future<void> _saveNotificationPreference({
+    required String key,
+    required bool value,
+    required bool previous,
+    required void Function(bool) apply,
+  }) async {
+    setState(() => apply(value));
+    try {
+      await APIClient.updateNotificationPreferences({key: value});
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => apply(previous));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not save notification preference'),
+        ),
+      );
     }
   }
 
@@ -699,11 +753,141 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const Divider(height: 1),
-          _buildSettingTile(
-            icon: Icons.smart_toy_outlined,
-            title: 'Active Model',
-            subtitle: _aiModel,
-            onTap: () => _showInfo('Active backend AI model: $_aiModel'),
+          _buildAiModelDropdown(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiProviderDropdown() {
+    final providerLabel = _aiProvider.toUpperCase();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AI Provider',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: _aiProvider,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.primary),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'gemini', child: Text('Gemini')),
+              DropdownMenuItem(value: 'ollama', child: Text('Ollama')),
+              DropdownMenuItem(
+                  value: 'compatible', child: Text('Compatible')),
+            ],
+            onChanged: (value) async {
+              if (value == null) return;
+              await APIClient.saveAiProvider(value);
+              final models = _aiModelsByProvider[value] ?? [];
+              final newModel = models.isNotEmpty ? models.first : _aiModel;
+              await APIClient.saveAiModel(newModel);
+              if (!mounted) return;
+              setState(() {
+                _aiProvider = value;
+                _aiModel = newModel;
+                _hasSavedSelection = true;
+              });
+            },
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$providerLabel ${_demoMode ? '(demo mode)' : '(configured)'}. Saved to device.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiModelDropdown() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AI Model',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            key: ValueKey('model_dropdown_$_aiProvider'),
+            initialValue: _aiModel,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.primary),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 14,
+              ),
+            ),
+            items: _aiModelsByProvider[_aiProvider]!
+                .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                .toList(),
+            onChanged: (value) async {
+              if (value == null) return;
+              await APIClient.saveAiModel(value);
+              if (!mounted) return;
+              setState(() {
+                _aiModel = value;
+                _hasSavedSelection = true;
+              });
+            },
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Active model: $_aiModel${_hasSavedSelection ? ' (saved)' : ' (from backend)'}.',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
           ),
           // API Key Configuration Section
           if (!_demoMode) ...[
@@ -842,8 +1026,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
-  Widget _buildGeneralSettings(BuildContext ctx) {
+      Widget _buildGeneralSettings(BuildContext ctx) {
     final isHealthy = _backendStatus.toLowerCase() == 'healthy' ||
         _backendStatus.toLowerCase() == 'ok';
 
@@ -882,6 +1065,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const Divider(height: 1),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            secondary: const Icon(
+              Icons.email_outlined,
+              color: AppColors.primary,
+            ),
+            title: const Text('Email notifications'),
+            subtitle: const Text('Receive updates by email'),
+            value: _emailNotifications,
+            onChanged: (v) => _saveNotificationPreference(
+              key: 'email_enabled',
+              value: v,
+              previous: _emailNotifications,
+              apply: (x) => _emailNotifications = x,
+            ),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            secondary: const Icon(
+              Icons.notifications_active_outlined,
+              color: AppColors.primary,
+            ),
+            title: const Text('Push notifications'),
+            subtitle: const Text('Receive alerts on your device'),
+            value: _pushNotifications,
+            onChanged: (v) => _saveNotificationPreference(
+              key: 'push_enabled',
+              value: v,
+              previous: _pushNotifications,
+              apply: (x) => _pushNotifications = x,
+            ),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+            secondary: const Icon(
+              Icons.alarm_outlined,
+              color: AppColors.primary,
+            ),
+            title: const Text('Learning reminders'),
+            subtitle: const Text('Reminders to continue your roadmap'),
+            value: _learningReminders,
+            onChanged: (v) => _saveNotificationPreference(
+              key: 'learning_reminders_enabled',
+              value: v,
+              previous: _learningReminders,
+              apply: (x) => _learningReminders = x,
+            ),
+          ),
+          const Divider(height: 1),
           _buildSettingTile(
             icon: Icons.logout_rounded,
             iconColor: AppColors.danger,
@@ -901,7 +1135,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
-
   Widget _buildSettingTile({
     required IconData icon,
     Color iconColor = AppColors.primary,

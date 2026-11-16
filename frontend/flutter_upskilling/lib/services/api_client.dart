@@ -19,6 +19,10 @@ class APIClient {
   // JWT token storage key
   static const String _tokenKey = 'jwt_token';
 
+  // AI provider/model storage keys
+  static const String _aiProviderKey = 'ai_provider';
+  static const String _aiModelKey = 'ai_model';
+
   static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_tokenKey);
@@ -32,6 +36,26 @@ class APIClient {
   static Future<void> removeToken() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
+  }
+
+  static Future<void> saveAiProvider(String provider) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_aiProviderKey, provider);
+  }
+
+  static Future<void> saveAiModel(String model) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_aiModelKey, model);
+  }
+
+  static Future<String?> getSavedAiProvider() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_aiProviderKey);
+  }
+
+  static Future<String?> getSavedAiModel() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_aiModelKey);
   }
 
   // buildHeaders constructs authorization headers using the token.
@@ -345,6 +369,29 @@ class APIClient {
     return _handleResponse(response);
   }
 
+    static Future<Map<String, dynamic>> getNotificationPreferences() async {
+    final uri = Uri.parse('$_baseUrl/api/settings/notifications');
+    final response = await http.get(
+      uri,
+      headers: await buildHeaders(),
+    );
+
+    return _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> updateNotificationPreferences(
+    Map<String, bool> preferences,
+  ) async {
+    final uri = Uri.parse('$_baseUrl/api/settings/notifications');
+    final response = await http.put(
+      uri,
+      headers: await buildHeaders(),
+      body: json.encode(preferences),
+    );
+
+    return _handleResponse(response);
+  }
+  
   static Future<Map<String, dynamic>> getHealth() async {
     final uri = Uri.parse('$_baseUrl/health');
     final response = await http.get(

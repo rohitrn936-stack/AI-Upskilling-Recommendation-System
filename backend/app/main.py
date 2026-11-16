@@ -1171,6 +1171,74 @@ async def update_ai_provider(payload: AIProviderUpdateRequest):
             "message": f"AI provider successfully updated to '{raw_provider}'",
         },
     }
+class NotificationPreferencesRequest(BaseModel):
+    email_enabled: bool | None = None
+    push_enabled: bool | None = None
+    learning_reminders_enabled: bool | None = None
+
+
+def _notification_prefs_response(prefs):
+    return {
+        "email_enabled": prefs.email_enabled,
+        "push_enabled": prefs.push_enabled,
+        "learning_reminders_enabled": prefs.learning_reminders_enabled,
+    }
+
+
+@app.get("/api/settings/notifications")
+async def get_notification_preferences(
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Get the current user's notification preferences."""
+    from app.database.models import NotificationPreference
+
+    prefs = (
+        db.query(NotificationPreference)
+        .filter(NotificationPreference.user_id == current_user.id)
+        .first()
+    )
+    if not prefs:
+        # No saved choices yet, so return the defaults (all on)
+        return {
+            "success": True,
+            "data": {
+                "email_enabled": True,
+                "push_enabled": True,
+                "learning_reminders_enabled": True,
+            },
+        }
+    return {"success": True, "data": _notification_prefs_response(prefs)}
+
+
+@app.put("/api/settings/notifications")
+async def update_notification_preferences(
+    payload: NotificationPreferencesRequest,
+    current_user = Depends(get_current_user_dependency),
+    db: Session = Depends(get_db),
+):
+    """Save the current user's notification preferences."""
+    from app.database.models import NotificationPreference
+
+    prefs = (
+        db.query(NotificationPreference)
+        .filter(NotificationPreference.user_id == current_user.id)
+        .first()
+    )
+    if not prefs:
+        prefs = NotificationPreference(user_id=current_user.id)
+        db.add(prefs)
+
+    if payload.email_enabled is not None:
+        prefs.email_enabled = payload.email_enabled
+    if payload.push_enabled is not None:
+        prefs.push_enabled = payload.push_enabled
+    if payload.learning_reminders_enabled is not None:
+        prefs.learning_reminders_enabled = payload.learning_reminders_enabled
+
+    db.commit()
+    db.refresh(prefs)
+    return {"success": True, "data": _notification_prefs_response(prefs)}
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
